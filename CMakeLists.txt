@@ -1,14 +1,25 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.18)
+
+include("cmake/HunterGate.cmake")
+HunterGate(
+    URL "https://github.com/cpp-pm/hunter/archive/v0.23.312.tar.gz"
+    SHA1 "42311324f6b859983d833cffc2151d0b86b8bea4"
+)
+
 project(dm)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_BUILD_TYPE Release)
 
+if(APPLE)
+    set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+endif()
+
 find_package(OpenCL REQUIRED)
 include_directories(${OpenCL_INCLUDE_DIR})
 
-find_package(Boost 1.75.0 REQUIRED COMPONENTS program_options)
-include_directories(${Boost_INCLUDE_DIRS})
+hunter_add_package(Boost COMPONENTS program_options)
+find_package(Boost CONFIG REQUIRED program_options)
 
 add_executable(dm dm.cpp cfg.cpp decoder.cpp kernel.cpp)
 target_link_libraries(dm ${OpenCL_LIBRARY} Boost::program_options)
