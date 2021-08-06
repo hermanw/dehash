@@ -8,7 +8,7 @@ HunterGate(
     SHA1 "42311324f6b859983d833cffc2151d0b86b8bea4"
 )
 
-project(dm)
+project(dehash)
 
 if(APPLE)
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
@@ -20,5 +20,5 @@ include_directories(${OpenCL_INCLUDE_DIR})
 hunter_add_package(Boost COMPONENTS program_options)
 find_package(Boost CONFIG REQUIRED program_options)
 
-add_executable(dm dm.cpp cfg.cpp decoder.cpp kernel.cpp)
-target_link_libraries(dm ${OpenCL_LIBRARY} Boost::program_options)
+add_executable(dehash src/dm.cpp src/cfg.cpp src/decoder.cpp src/kernel.cpp)
+target_link_libraries(dehash ${OpenCL_LIBRARY} Boost::program_options)
