@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.18)
 
+set(CMAKE_CXX_STANDARD 11)
+
 include("cmake/HunterGate.cmake")
 HunterGate(
     URL "https://github.com/cpp-pm/hunter/archive/v0.23.312.tar.gz"
@@ -7,9 +9,6 @@ HunterGate(
 )
 
 project(dm)
-
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_BUILD_TYPE Release)
 
 if(APPLE)
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
