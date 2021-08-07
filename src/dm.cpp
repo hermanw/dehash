@@ -42,14 +42,14 @@ void print_info()
 {
     std::cout << "printing opencl info...\n";
 
-    Decoder decoder("dm.cfg", "benchmark");
+    Decoder decoder("config.json", "benchmark");
     decoder.set_hash_string("f3cf9924949207114472783ed41aa9ee,757295d360508357f8ac682c432416f3,ec7adbba8ee2f1481821b879541fdb7e,eeb1f4145fe2adb38356cd665cf0a179,3f3a4159a9340300c8db318831152f14,cc32ce34137a758ee009bd521e00177f,e2577739aee99b47211b4e23b9ce802b,26b3e34f0b1c139693c725a2dd79b3d4,ef5e10e0d2d0134ac37d89fbf98539c0,6e39bf085901f95c7123ff9205e3f9c2");
     int platform_index = 0;
     int device_index = 0;
     decoder.benchmark(platform_index, device_index);
 
-    // write dm.ini
-    std::ofstream file("dm.ini");
+    // write dehash.ini
+    std::ofstream file("dehash.ini");
     file << "platform = " << platform_index << "\n";
     file << "device = " << device_index << "\n";
     file.close();
@@ -57,8 +57,8 @@ void print_info()
 
 int main(int argc, char *argv[])
 {
-    // check dm.ini
-    std::ifstream ini("dm.ini");
+    // check dehash.ini
+    std::ifstream ini("dehash.ini");
     if (!ini.good())
     {
         // run for the first time
@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
         ;
     po::variables_map vm;
     po::store(po::command_line_parser(argc, argv).options(cmdline_options).positional(p).run(), vm);
-    po::store(po::parse_config_file("dm.ini", desc), vm);
+    po::store(po::parse_config_file("dehash.ini", desc), vm);
     po::notify(vm);
 
     if (vm.count("help"))
@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    Decoder decoder("dm.cfg", cfg.c_str());
+    Decoder decoder("config.json", cfg.c_str());
     decoder.set_hash_string(str.c_str());
     const int hash_len = decoder.get_hash_len();
     const int dedup_len = decoder.get_dedup_len();
