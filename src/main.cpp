@@ -5,6 +5,7 @@
 #include <boost/program_options.hpp>
 
 #include "decoder.h"
+#include "device_pool.h"
 
 bool read_from_file(const std::string &filename, std::string &str)
 {
@@ -35,24 +36,40 @@ void write_to_file(const std::string &filename, std::string &str)
 
 void print_version()
 {
-    std::cout << "md5 decoder [opencl] 1.2, by herman\n";
+    std::cout << "hash decoder 0.1, by herman\n";
 }
 
 void print_info()
 {
-    std::cout << "printing opencl info...\n";
+    std::cout << "compute devices:\n";
+    auto dp = new DevicePool();
+    dp->print_info();
+    delete dp;
 
-    Decoder decoder("config.json", "benchmark");
-    decoder.set_hash_string("f3cf9924949207114472783ed41aa9ee,757295d360508357f8ac682c432416f3,ec7adbba8ee2f1481821b879541fdb7e,eeb1f4145fe2adb38356cd665cf0a179,3f3a4159a9340300c8db318831152f14,cc32ce34137a758ee009bd521e00177f,e2577739aee99b47211b4e23b9ce802b,26b3e34f0b1c139693c725a2dd79b3d4,ef5e10e0d2d0134ac37d89fbf98539c0,6e39bf085901f95c7123ff9205e3f9c2");
-    int platform_index = 0;
-    int device_index = 0;
-    decoder.benchmark(platform_index, device_index);
+    // Decoder decoder("config.json", "benchmark");
+    // decoder.set_hash_string("f3cf9924949207114472783ed41aa9ee,757295d360508357f8ac682c432416f3,ec7adbba8ee2f1481821b879541fdb7e,eeb1f4145fe2adb38356cd665cf0a179,3f3a4159a9340300c8db318831152f14,cc32ce34137a758ee009bd521e00177f,e2577739aee99b47211b4e23b9ce802b,26b3e34f0b1c139693c725a2dd79b3d4,ef5e10e0d2d0134ac37d89fbf98539c0,6e39bf085901f95c7123ff9205e3f9c2");
+    // int platform_index = 0;
+    // int device_index = 0;
+    // decoder.benchmark(platform_index, device_index);
 
-    // write dehash.ini
-    std::ofstream file("dehash.ini");
-    file << "platform = " << platform_index << "\n";
-    file << "device = " << device_index << "\n";
-    file.close();
+    // // write dehash.ini
+    // std::ofstream file("dehash.ini");
+    // file << "platform = " << platform_index << "\n";
+    // file << "device = " << device_index << "\n";
+    // file.close();
+}
+
+void decode(const std::string &str, std::string &result, const std::string &devices, Cfg &cfg)
+{
+    Decoder decoder(cfg);
+    decoder.set_hash_string(str.c_str());
+    // const int hash_len = decoder.get_hash_len();
+    // const int dedup_len = decoder.get_dedup_len();
+    // std::cout << "find " << hash_len << " hashes (" << hash_len - dedup_len << " duplicated, " << dedup_len << " unique)\n";
+    // std::cout << "using decode pattern \"" << cfg. << "\"" << std::endl;
+
+    decoder.decode(devices);
+    // decoder.get_result(result);
 }
 
 int main(int argc, char *argv[])
@@ -67,17 +84,15 @@ int main(int argc, char *argv[])
     }
 
     // handle program options
-    int platform = 0;
-    int device = 0;
+    std::string devices;
     std::string cfg;
     namespace po = boost::program_options;
-    po::options_description desc("usage: dm [option] filename\noptions");
+    po::options_description desc("usage: dehash [option] filename\noptions");
     desc.add_options()
         ("help,h", "print help message")
         ("version,v", "print version")
-        ("info,i", "print opencl info")
-        ("platform,p", po::value<int>(&platform), "set opencl platform index")
-        ("device,d", po::value<int>(&device), "set opencl device index")
+        ("info,i", "print compute devices info")
+        ("devices,d", po::value<std::string>(&devices), "set compute devices: -d 0,1,2")
         ("cfg,c", po::value<std::string>(&cfg), "set decode pattern [required]")
         ;
     po::positional_options_description p;
@@ -123,16 +138,12 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    Decoder decoder("config.json", cfg.c_str());
-    decoder.set_hash_string(str.c_str());
-    const int hash_len = decoder.get_hash_len();
-    const int dedup_len = decoder.get_dedup_len();
-    std::cout << "find " << hash_len << " hashes (" << hash_len - dedup_len << " duplicated, " << dedup_len << " unique)\n";
-    std::cout << "using decode pattern \"" << cfg << "\"" << std::endl;
-
-    decoder.decode(platform, device);
-    // write reults
+    // decode
+    auto thecfg = new Cfg("config.json", cfg.c_str());
     std::string result;
-    decoder.get_result(result);
+    decode(str, result, devices, *thecfg);
+    delete thecfg;
+
+    // write reults
     write_to_file(filename, result);
 }

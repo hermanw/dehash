@@ -20,5 +20,5 @@ include_directories(${OpenCL_INCLUDE_DIR})
 hunter_add_package(Boost COMPONENTS program_options)
 find_package(Boost CONFIG REQUIRED program_options)
 
-add_executable(dehash src/dm.cpp src/cfg.cpp src/decoder.cpp src/kernel.cpp)
+add_executable(dehash src/main.cpp src/cfg.cpp src/decoder.cpp src/device_pool.cpp src/device.cpp src/device_cl.cpp)
 target_link_libraries(dehash ${OpenCL_LIBRARY} Boost::program_options)

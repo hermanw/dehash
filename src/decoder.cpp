@@ -2,20 +2,21 @@
 #include <sstream>
 #include <algorithm>
 #include <chrono>
+#include <thread>
+#include <mutex>
 #include "decoder.h"
+#include "device_pool.h"
 
-Decoder::Decoder(const char *cfg_filename, const char *cfg_name)
+Decoder::Decoder(Cfg &cfg)
+:m_cfg(cfg)
 {
     m_benchmark = false;
     m_kernel_score = 0;
-    m_cfg = new Cfg(cfg_filename, cfg_name);
-    Kernel::enum_devices(m_platforms);
 }
 
 Decoder::~Decoder()
 {
-    delete m_cfg;
-    Kernel::release_platforms(m_platforms);
+    delete[] m_input;
 }
 
 int Decoder::is_valid_digit(const char c)
@@ -127,16 +128,6 @@ void Decoder::dedup_sorted_hash()
     }
 }
 
-Hash *Decoder::create_hash_buffer()
-{
-    Hash *p_hash = new Hash[m_dedup_len];
-    for (int i = 0; i < m_dedup_len; i++)
-    {
-        p_hash[i] = m_hash[i].hash;
-    }
-    return p_hash;
-}
-
 void Decoder::update_result(char *p_data, int data_length)
 {
     m_data.resize(m_hash_len);
@@ -176,24 +167,24 @@ void Decoder::set_hash_string(const char *s)
     dedup_sorted_hash();
 }
 
-bool Decoder::run_in_host(Kernel *kernel, uint8_t* input, int index)
+bool Decoder::run_in_host(int index)
 {
-    int ds_size = m_cfg->cpu_sections.size();
+    int ds_size = m_cfg.cpu_sections.size();
     // done
     if (index >= ds_size)
     {
-        return run_in_kernel(kernel, input);
+        return run_in_kernel();
     }
     // fill host data and go to next section
-    auto &ds = m_cfg->cpu_sections[index];
-    auto &source = m_cfg->sources[ds.source];
+    auto &ds = m_cfg.cpu_sections[index];
+    auto &source = m_cfg.sources[ds.source];
     for(auto &s : source)
     {
         for (int i = 0; i < s.size(); i++)
         {
-            input[i + ds.index] = s[i];
+            m_input[i + ds.index] = s[i];
         }
-        if(run_in_host(kernel, input, index + 1))
+        if(run_in_host(index + 1))
         {
             return true;
         }
@@ -202,76 +193,111 @@ bool Decoder::run_in_host(Kernel *kernel, uint8_t* input, int index)
     return false;
 }
 
-bool Decoder::run_in_kernel(Kernel *kernel, uint8_t* input)
+bool Decoder::run_in_kernel()
 {
-    int data_length = m_cfg->length;
-    
-    auto start = std::chrono::steady_clock::now();
-    int count = kernel->run(input, m_dedup_len, data_length, m_cfg->kernel_work_size);
-    if (m_benchmark)
+    m_input_ready = true;
+    bool ready = false;
+    do
     {
-        auto end = std::chrono::steady_clock::now();
-        auto e = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        if (m_kernel_score == 0 || m_kernel_score > e)
-        {
-            m_kernel_score = e;
-        }
-    }
-    else
-    {
-        m_iterations++;
-        // auto end = std::chrono::steady_clock::now();
-        // auto e = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-        // std::cout << e << std::endl;
-        std::cout << "\033[1A" << count << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s - searching " ;
-        for(int i = 0; i < data_length; i++)
-        {
-            char c = input[i];
-            std::cout << (c ? c : '*');
-        }
-        std::cout << ", " << m_iterations * 100 / m_iterations_len << "%\n";
-    }
+        m_mtx.lock();
+        ready = m_input_ready;
+        m_mtx.unlock();
+    } while (ready);
 
-    return (count == m_dedup_len);
+    // int count = kernel->run(input, m_dedup_len, data_length, m_cfg.kernel_work_size);
+
+    // m_iterations++;
+    // std::cout << "\033[1A" << count << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s - searching " ;
+    // int data_length = m_cfg.length;
+    // for(int i = 0; i < data_length; i++)
+    // {
+    //     char c = input[i];
+    //     std::cout << (c ? c : '*');
+    // }
+    // std::cout << ", " << m_iterations * 100 / m_iterations_len << "%\n";
+
+    // return (count == m_dedup_len);
+    return false;
 }
 
-void Decoder::decode(int platform_index, int device_index)
+void Decoder::thread_function(Device *device)
 {
-    int data_length = m_cfg->length;
+    // build options string
+    int data_length = m_cfg.length;
     std::ostringstream options;
     options << "-D DATA_LENGTH=" << data_length;
     std::vector<std::string> XYZ = {"X", "Y", "Z"};
-    for(int i = 0; i < m_cfg->gpu_sections.size(); i++)
+    for(int i = 0; i < m_cfg.gpu_sections.size(); i++)
     {
-        auto &ds = m_cfg->gpu_sections[i];
+        auto &ds = m_cfg.gpu_sections[i];
         options << " -D " << XYZ[i] << "_INDEX=" << ds.index;
         options << " -D " << XYZ[i] << "_LENGTH=" << ds.length;
         options << " -D " << XYZ[i] << "_TYPE=" << ds.type;
     }
+    device->init(options.str().c_str());
+    device->create_buffers(m_p_hash, m_p_number, m_p_helper, hash_length, data_length, helper_length);
 
-    auto kernel = new Kernel();
-    kernel->set_device(m_platforms, platform_index, device_index, options.str().c_str());
-    if (!m_benchmark)
+    while(1)
     {
-        std::cout << "using " << m_platforms.devices[platform_index].names[device_index] << std::endl;
+        m_mtx.lock();
+        if (m_done)
+        {
+            m_mtx.unlock();
+            return;
+        }
+        else if (m_input_ready)
+        {
+            std::cout << m_input << std::endl;
+            device->submit(m_input, hash_length, data_length);
+            m_input_ready = false;
+            m_mtx.unlock();
+            int count = device->run();
+            std::cout << count << std::endl;
+            // std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+        else
+        {
+            m_mtx.unlock();
+        }        
     }
+}
+
+std::vector<std::string> split(const std::string& s, char delimiter)
+{
+   std::vector<std::string> tokens;
+   std::string token;
+   std::istringstream tokenStream(s);
+   while (std::getline(tokenStream, token, delimiter))
+   {
+      tokens.push_back(token);
+   }
+   return tokens;
+}
+
+void Decoder::decode(const std::string &devices)
+{
+    data_length = m_cfg.length;
 
     // build hash buffer
-    Hash *p_hash = create_hash_buffer();
+    m_p_hash = new Hash[m_dedup_len];
+    for (int i = 0; i < m_dedup_len; i++)
+    {
+        m_p_hash[i] = m_hash[i].hash;
+    }
     // build number buffer
     long numbers_length = 10000 * 4;
-    char* p_number = new char[numbers_length];
+    m_p_number = new char[numbers_length];
     for (size_t i = 0; i < 10000; i++)
     {
-        p_number[i * 4 + 0] = i / 1000 + '0';
-        p_number[i * 4 + 1] = i / 100 % 10 + '0';
-        p_number[i * 4 + 2] = i / 10 % 10 + '0';
-        p_number[i * 4 + 3] = i % 10 + '0';
+        m_p_number[i * 4 + 0] = i / 1000 + '0';
+        m_p_number[i * 4 + 1] = i / 100 % 10 + '0';
+        m_p_number[i * 4 + 2] = i / 10 % 10 + '0';
+        m_p_number[i * 4 + 3] = i % 10 + '0';
     }
     // build hepler buffer - assume at most one gpu list section for now
     int listds_length = 0;
     std::string listds_source;
-    for(auto& ds : m_cfg->gpu_sections)
+    for(auto& ds : m_cfg.gpu_sections)
     {
         if(ds.type == ds_type_list)
         {
@@ -280,75 +306,78 @@ void Decoder::decode(int platform_index, int device_index)
             break;
         }
     }
-    long list_length = listds_length * m_cfg->sources[listds_source].size();
-    char* p_helper = new char[list_length];
+    long list_length = listds_length * m_cfg.sources[listds_source].size();
+    char* m_p_helper = new char[list_length];
     if (list_length > 0)
     {
         long offset = 0;
-        for(auto& s : m_cfg->sources[listds_source])
+        for(auto& s : m_cfg.sources[listds_source])
         {
             for(int i = 0; i < listds_length; i++)
             {
-                p_helper[offset++] = s[i];
+                m_p_helper[offset++] = s[i];
             }
         }
     }
 
-    // create buffers
-    kernel->create_buffers(p_hash, p_number, p_helper, m_dedup_len, data_length, numbers_length);
-
-    delete[] p_hash;
-    delete[] p_number;
-    delete[] p_helper;
-
+    // start threads for each device
     if (!m_benchmark)
     {
         std::cout << "starting...\n";
     }
+    m_input = new uint8_t[data_length]();
+    m_input_ready = false;
+    m_done = false;
+
+    auto dp = new DevicePool();
+    std::vector<std::string> list = split(devices, ',');
+    for(auto &index :list)
+    {
+        auto device = dp->get_device(std::stoi(index));
+        std::cout << device->info << std::endl;
+        std::thread th(&Decoder::thread_function, this, device);
+        th.detach();       
+    }
+
     m_start = time(NULL);
     m_iterations = 0;
     m_iterations_len = 1;
-    for(auto &ds : m_cfg->cpu_sections)
+    for(auto &ds : m_cfg.cpu_sections)
     {
-        m_iterations_len *= m_cfg->sources[ds.source].size();
+        m_iterations_len *= m_cfg.sources[ds.source].size();
     }
-    auto input = new uint8_t[data_length]();
-    run_in_host(kernel, input, 0);
-    delete[] input;
-    // if (!m_benchmark)
-    // {
-    //     std::cout << "total " << *(p+1) << " hashes are decoded\n";
-    // }
+    run_in_host(0);
+    delete dp;
 
     // read results
-    int result_length = m_dedup_len * data_length;
-    char *p_data = new char[result_length];
-    kernel->read_results(p_data, result_length);
-    update_result(p_data, data_length);
-    delete[] p_data;
+    // int result_length = m_dedup_len * data_length;
+    // char *p_data = new char[result_length];
+    // kernel->read_results(p_data, result_length);
+    // update_result(p_data, data_length);
+    // delete[] p_data;
 }
 
 void Decoder::benchmark(int &platform_index, int &device_index)
 {
-    m_benchmark = true;
-    long top_score = 100000;
-    for (int i = 0; i < m_platforms.count; i++)
-    {
-        std::cout << "platform " << i << ": " << m_platforms.names[i] << std::endl;
-        auto& devices = m_platforms.devices[i];
-        for (int j = 0; j < devices.count; j++)
-        {
-            std::cout << "\tdevice " << j << ": " << devices.names[j];
-            std::cout.flush();
-            m_kernel_score = 0;
-            decode(i,j);
-            std::cout << ", score(" << m_kernel_score << ")\n";
-            if(m_kernel_score < top_score)
-            {
-                top_score = m_kernel_score;
-                platform_index = i;
-                device_index = j;
-            }
-        }
-    }
+    // m_benchmark = true;
+    // long top_score = 100000;
+    // for (int i = 0; i < m_platforms.count; i++)
+    // {
+    //     std::cout << "platform " << i << ": " << m_platforms.names[i] << std::endl;
+    //     auto& devices = m_platforms.devices[i];
+    //     for (int j = 0; j < devices.count; j++)
+    //     {
+    //         std::cout << "\tdevice " << j << ": " << devices.names[j];
+    //         std::cout.flush();
+    //         m_kernel_score = 0;
+    //         decode(i,j);
+    //         std::cout << ", score(" << m_kernel_score << ")\n";
+    //         if(m_kernel_score < top_score)
+    //         {
+    //             top_score = m_kernel_score;
+    //             platform_index = i;
+    //             device_index = j;
+    //         }
+    //     }
+    // }
 }

@@ -1,8 +1,16 @@
+#pragma once
+
 #include <vector>
 #include <map>
 #include "nlohmann/json.hpp"
 
-enum ds_type {ds_type_list, ds_type_digit, ds_type_idsum, ds_type_char};
+enum ds_type
+{
+    ds_type_list,
+    ds_type_digit,
+    ds_type_idsum,
+    ds_type_char
+};
 
 struct DataSection
 {

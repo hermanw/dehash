@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <string>
-#include "kernel.h"
+#include "device.h"
 #include "cfg.h"
 
 #define HASH_LEN 32
@@ -24,30 +24,15 @@ typedef struct
 
 class Decoder
 {
-private:
-    Platforms m_platforms;
-    Cfg *m_cfg;
-    int m_hash_len;
-    int m_dedup_len;
-    std::vector<std::string> m_hash_string;
-    std::vector<SortedHash> m_hash;
-    std::vector<std::string> m_data;
-    time_t m_start;
-    int m_iterations;
-    int m_iterations_len;
-    bool m_benchmark;
-    long m_kernel_score;
-
 public:
-    Decoder(const char *cfg_filename, const char *cfg_name);
+    Decoder(Cfg &cfg);
     ~Decoder();
     void set_hash_string(const char *s);
     int get_hash_len() const { return m_hash_len; }
     int get_dedup_len() const { return m_dedup_len; }
-    Hash *create_hash_buffer();
     void update_result(char *p_data, int data_length);
     void get_result(std::string &result);
-    void decode(int platform_index, int device_index);
+    void decode(const std::string &devices);
     void benchmark(int &platform_index, int &device_index);
 
 private:
@@ -59,8 +44,34 @@ private:
     static int compare_hash_binary(const uint64_t *a, const uint64_t *b);
     static bool compare_hash(SortedHash &a, SortedHash &b);
     void dedup_sorted_hash();
-    bool run_in_host(Kernel *kernel, uint8_t *params, int index);
-    bool run_in_kernel(Kernel *kernel, uint8_t *params);
+    bool run_in_host(int index);
+    bool run_in_kernel();
+    void thread_function(Device *device);
+
+private:
+    Cfg &m_cfg;
+    int m_hash_len;
+    int m_dedup_len;
+    std::vector<std::string> m_hash_string;
+    std::vector<SortedHash> m_hash;
+    std::vector<std::string> m_data;
+    time_t m_start;
+    int m_iterations;
+    int m_iterations_len;
+    bool m_benchmark;
+    long m_kernel_score;
+    // for threads
+    std::mutex m_mtx;
+    uint8_t *m_input;
+    bool m_input_ready;
+    bool m_done;
+    // buffers
+    Hash *m_p_hash;
+    char *m_p_number;
+    char *m_p_helper;
+    int hash_length;
+    int data_length;
+    int helper_length;
 };
 
 #endif
