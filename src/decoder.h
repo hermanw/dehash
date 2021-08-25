@@ -33,7 +33,7 @@ public:
     void update_result(char *p_data, int data_length);
     void get_result(std::string &result);
     void decode(const std::string &devices);
-    void benchmark(int &platform_index, int &device_index);
+    void benchmark();
 
 private:
     int is_valid_digit(const char c);
@@ -46,7 +46,7 @@ private:
     void dedup_sorted_hash();
     bool run_in_host(int index);
     bool run_in_kernel();
-    void thread_function(Device *device);
+    void thread_function(Device *device, std::mutex *mutex);
 
 private:
     Cfg &m_cfg;
@@ -55,9 +55,12 @@ private:
     std::vector<std::string> m_hash_string;
     std::vector<SortedHash> m_hash;
     std::vector<std::string> m_data;
+    std::ostringstream m_options;
+    // for progress
     time_t m_start;
     int m_iterations;
     int m_iterations_len;
+    // for benchmark
     bool m_benchmark;
     long m_kernel_score;
     // for threads

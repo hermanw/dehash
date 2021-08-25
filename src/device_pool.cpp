@@ -15,9 +15,14 @@ DevicePool::~DevicePool()
     m_devices_list.clear();
 }
 
-Device* DevicePool::get_device(int index)
+Device *DevicePool::get_device(int index)
 {
     return m_devices_list[index];
+}
+
+int DevicePool::get_device_count()
+{
+    return m_devices_list.size();
 }
 
 void DevicePool::print_info()

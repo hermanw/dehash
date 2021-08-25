@@ -130,17 +130,24 @@ DeviceCl::~DeviceCl()
 
 void DeviceCl::create_buffers(void* p_hash, void* p_number, void* p_helper, int hash_length, int data_length,int helper_length)
 {
-    count_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int), 0, 0);
+    cl_int error = CL_SUCCESS;
+    count_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int), 0, &error);
+    CheckCLError(error);
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &count_buffer);
-    data_buffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, hash_length * data_length, 0, 0);
+    data_buffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, hash_length * data_length, 0, &error);
+    CheckCLError(error);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &data_buffer);
-    hash_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, hash_length * 16, p_hash, 0);
+    hash_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, hash_length * 16, p_hash, &error);
+    CheckCLError(error);
     clSetKernelArg(kernel, 2, sizeof(cl_mem), &hash_buffer);
-    number_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 40000, p_number, 0);
+    number_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 40000, p_number, &error);
+    CheckCLError(error);
     clSetKernelArg(kernel, 3, sizeof(cl_mem), &number_buffer);
-    helper_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, helper_length, p_helper, 0);
+    helper_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, helper_length, p_helper, &error);
+    // CheckCLError(error);
     clSetKernelArg(kernel, 4, sizeof(cl_mem), &helper_buffer);
-    input_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, data_length, 0, 0);
+    input_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, data_length, 0, &error);
+    CheckCLError(error);
     clSetKernelArg(kernel, 5, sizeof(cl_mem), &input_buffer);
 }
 
@@ -154,10 +161,8 @@ void DeviceCl::submit(void *input, int hash_length, int data_length)
 
 }
 
-int DeviceCl::run()
+int DeviceCl::run(size_t kernel_work_size[3])
 {
-    std::cout << "run" << std::endl;
-    size_t kernel_work_size[3] = {1, 1, 1};
     CheckCLError(clEnqueueNDRangeKernel(queue, kernel, 3,
                                         nullptr,
                                         kernel_work_size,
@@ -170,5 +175,4 @@ int DeviceCl::run()
                                         &count,
                                         0, nullptr, nullptr));
     return count;
-
 }

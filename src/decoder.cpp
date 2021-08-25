@@ -9,14 +9,12 @@
 
 Decoder::Decoder(Cfg &cfg)
 :m_cfg(cfg)
+,m_benchmark(false)
 {
-    m_benchmark = false;
-    m_kernel_score = 0;
 }
 
 Decoder::~Decoder()
 {
-    delete[] m_input;
 }
 
 int Decoder::is_valid_digit(const char c)
@@ -165,6 +163,62 @@ void Decoder::set_hash_string(const char *s)
     parse_hash_string(s);
     std::sort(m_hash.begin(), m_hash.end(), compare_hash);
     dedup_sorted_hash();
+
+    // build options string
+    data_length = m_cfg.length;
+    m_options << "-D DATA_LENGTH=" << data_length;
+    std::vector<std::string> XYZ = {"X", "Y", "Z"};
+    for(int i = 0; i < m_cfg.gpu_sections.size(); i++)
+    {
+        auto &ds = m_cfg.gpu_sections[i];
+        m_options << " -D " << XYZ[i] << "_INDEX=" << ds.index;
+        m_options << " -D " << XYZ[i] << "_LENGTH=" << ds.length;
+        m_options << " -D " << XYZ[i] << "_TYPE=" << ds.type;
+    }
+
+    //// build host buffers
+    // build hash buffer
+    m_p_hash = new Hash[m_dedup_len];
+    for (int i = 0; i < m_dedup_len; i++)
+    {
+        m_p_hash[i] = m_hash[i].hash;
+    }
+    // build number buffer
+    long numbers_length = 10000 * 4;
+    m_p_number = new char[numbers_length];
+    for (size_t i = 0; i < 10000; i++)
+    {
+        m_p_number[i * 4 + 0] = i / 1000 + '0';
+        m_p_number[i * 4 + 1] = i / 100 % 10 + '0';
+        m_p_number[i * 4 + 2] = i / 10 % 10 + '0';
+        m_p_number[i * 4 + 3] = i % 10 + '0';
+    }
+    // build hepler buffer - assume at most one gpu list section for now
+    int listds_length = 0;
+    std::string listds_source;
+    for(auto& ds : m_cfg.gpu_sections)
+    {
+        if(ds.type == ds_type_list)
+        {
+            listds_length = ds.length;
+            listds_source = ds.source;
+            break;
+        }
+    }
+    long list_length = listds_length * m_cfg.sources[listds_source].size();
+    char* m_p_helper = new char[list_length];
+    helper_length = list_length;
+    if (list_length > 0)
+    {
+        long offset = 0;
+        for(auto& s : m_cfg.sources[listds_source])
+        {
+            for(int i = 0; i < listds_length; i++)
+            {
+                m_p_helper[offset++] = s[i];
+            }
+        }
+    }
 }
 
 bool Decoder::run_in_host(int index)
@@ -220,21 +274,11 @@ bool Decoder::run_in_kernel()
     return false;
 }
 
-void Decoder::thread_function(Device *device)
+void Decoder::thread_function(Device *device, std::mutex *mutex)
 {
-    // build options string
-    int data_length = m_cfg.length;
-    std::ostringstream options;
-    options << "-D DATA_LENGTH=" << data_length;
-    std::vector<std::string> XYZ = {"X", "Y", "Z"};
-    for(int i = 0; i < m_cfg.gpu_sections.size(); i++)
-    {
-        auto &ds = m_cfg.gpu_sections[i];
-        options << " -D " << XYZ[i] << "_INDEX=" << ds.index;
-        options << " -D " << XYZ[i] << "_LENGTH=" << ds.length;
-        options << " -D " << XYZ[i] << "_TYPE=" << ds.type;
-    }
-    device->init(options.str().c_str());
+    std::lock_guard<std::mutex> guard(*mutex);
+
+    device->init(m_options.str().c_str());
     device->create_buffers(m_p_hash, m_p_number, m_p_helper, hash_length, data_length, helper_length);
 
     while(1)
@@ -247,13 +291,22 @@ void Decoder::thread_function(Device *device)
         }
         else if (m_input_ready)
         {
-            std::cout << m_input << std::endl;
+            auto start = std::chrono::steady_clock::now();
+            std::cout << m_input;
             device->submit(m_input, hash_length, data_length);
             m_input_ready = false;
             m_mtx.unlock();
-            int count = device->run();
-            std::cout << count << std::endl;
-            // std::this_thread::sleep_for(std::chrono::seconds(1));
+            int count = device->run(m_cfg.kernel_work_size);
+            std::cout << ":" << count << std::endl;
+            if (m_benchmark)
+            {
+                auto end = std::chrono::steady_clock::now();
+                auto e = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+                if (m_kernel_score == 0 || m_kernel_score > e)
+                {
+                    m_kernel_score = e;
+                }
+            }
         }
         else
         {
@@ -276,67 +329,21 @@ std::vector<std::string> split(const std::string& s, char delimiter)
 
 void Decoder::decode(const std::string &devices)
 {
-    data_length = m_cfg.length;
-
-    // build hash buffer
-    m_p_hash = new Hash[m_dedup_len];
-    for (int i = 0; i < m_dedup_len; i++)
-    {
-        m_p_hash[i] = m_hash[i].hash;
-    }
-    // build number buffer
-    long numbers_length = 10000 * 4;
-    m_p_number = new char[numbers_length];
-    for (size_t i = 0; i < 10000; i++)
-    {
-        m_p_number[i * 4 + 0] = i / 1000 + '0';
-        m_p_number[i * 4 + 1] = i / 100 % 10 + '0';
-        m_p_number[i * 4 + 2] = i / 10 % 10 + '0';
-        m_p_number[i * 4 + 3] = i % 10 + '0';
-    }
-    // build hepler buffer - assume at most one gpu list section for now
-    int listds_length = 0;
-    std::string listds_source;
-    for(auto& ds : m_cfg.gpu_sections)
-    {
-        if(ds.type == ds_type_list)
-        {
-            listds_length = ds.length;
-            listds_source = ds.source;
-            break;
-        }
-    }
-    long list_length = listds_length * m_cfg.sources[listds_source].size();
-    char* m_p_helper = new char[list_length];
-    if (list_length > 0)
-    {
-        long offset = 0;
-        for(auto& s : m_cfg.sources[listds_source])
-        {
-            for(int i = 0; i < listds_length; i++)
-            {
-                m_p_helper[offset++] = s[i];
-            }
-        }
-    }
-
     // start threads for each device
-    if (!m_benchmark)
-    {
-        std::cout << "starting...\n";
-    }
     m_input = new uint8_t[data_length]();
     m_input_ready = false;
     m_done = false;
 
+    std::vector<std::mutex*> thread_mutex;
     auto dp = new DevicePool();
     std::vector<std::string> list = split(devices, ',');
     for(auto &index :list)
     {
+        auto mutex = new std::mutex();
+        thread_mutex.push_back(mutex);
         auto device = dp->get_device(std::stoi(index));
-        std::cout << device->info << std::endl;
-        std::thread th(&Decoder::thread_function, this, device);
-        th.detach();       
+        std::thread t(&Decoder::thread_function, this, device, mutex);
+        t.detach();       
     }
 
     m_start = time(NULL);
@@ -347,7 +354,18 @@ void Decoder::decode(const std::string &devices)
         m_iterations_len *= m_cfg.sources[ds.source].size();
     }
     run_in_host(0);
+    m_mtx.lock();
+    m_done = true;
+    m_mtx.unlock();
+    for(auto mutex : thread_mutex)
+    {
+        mutex->lock();
+        delete mutex;
+    }
+
     delete dp;
+    delete[] m_input;
+
 
     // read results
     // int result_length = m_dedup_len * data_length;
@@ -357,27 +375,18 @@ void Decoder::decode(const std::string &devices)
     // delete[] p_data;
 }
 
-void Decoder::benchmark(int &platform_index, int &device_index)
+void Decoder::benchmark()
 {
-    // m_benchmark = true;
-    // long top_score = 100000;
-    // for (int i = 0; i < m_platforms.count; i++)
-    // {
-    //     std::cout << "platform " << i << ": " << m_platforms.names[i] << std::endl;
-    //     auto& devices = m_platforms.devices[i];
-    //     for (int j = 0; j < devices.count; j++)
-    //     {
-    //         std::cout << "\tdevice " << j << ": " << devices.names[j];
-    //         std::cout.flush();
-    //         m_kernel_score = 0;
-    //         decode(i,j);
-    //         std::cout << ", score(" << m_kernel_score << ")\n";
-    //         if(m_kernel_score < top_score)
-    //         {
-    //             top_score = m_kernel_score;
-    //             platform_index = i;
-    //             device_index = j;
-    //         }
-    //     }
-    // }
+    m_benchmark = true;
+
+    auto dp = new DevicePool();
+    int count = dp->get_device_count();
+    for (int i = 0; i < count; ++i)
+    {
+        std::cout << i << ". " << dp->get_device(i)->info << std::endl;
+        m_kernel_score = 0;
+        decode(std::to_string(i));
+        std::cout << "----score: " << m_kernel_score << std::endl;
+    }
+    delete dp;
 }

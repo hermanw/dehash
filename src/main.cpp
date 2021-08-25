@@ -45,18 +45,22 @@ void print_info()
     auto dp = new DevicePool();
     dp->print_info();
     delete dp;
+}
 
-    // Decoder decoder("config.json", "benchmark");
-    // decoder.set_hash_string("f3cf9924949207114472783ed41aa9ee,757295d360508357f8ac682c432416f3,ec7adbba8ee2f1481821b879541fdb7e,eeb1f4145fe2adb38356cd665cf0a179,3f3a4159a9340300c8db318831152f14,cc32ce34137a758ee009bd521e00177f,e2577739aee99b47211b4e23b9ce802b,26b3e34f0b1c139693c725a2dd79b3d4,ef5e10e0d2d0134ac37d89fbf98539c0,6e39bf085901f95c7123ff9205e3f9c2");
-    // int platform_index = 0;
-    // int device_index = 0;
-    // decoder.benchmark(platform_index, device_index);
+void benchmark()
+{
+    std::cout << "compute devices:\n";
+    auto thecfg = new Cfg("config.json", "benchmark");
+    Decoder decoder(*thecfg);
+    decoder.set_hash_string("f3cf9924949207114472783ed41aa9ee,757295d360508357f8ac682c432416f3,ec7adbba8ee2f1481821b879541fdb7e,eeb1f4145fe2adb38356cd665cf0a179,3f3a4159a9340300c8db318831152f14,cc32ce34137a758ee009bd521e00177f,e2577739aee99b47211b4e23b9ce802b,26b3e34f0b1c139693c725a2dd79b3d4,ef5e10e0d2d0134ac37d89fbf98539c0,6e39bf085901f95c7123ff9205e3f9c2");
+    decoder.benchmark();
 
     // // write dehash.ini
     // std::ofstream file("dehash.ini");
     // file << "platform = " << platform_index << "\n";
     // file << "device = " << device_index << "\n";
     // file.close();
+    delete thecfg;
 }
 
 void decode(const std::string &str, std::string &result, const std::string &devices, Cfg &cfg)
@@ -92,6 +96,7 @@ int main(int argc, char *argv[])
         ("help,h", "print help message")
         ("version,v", "print version")
         ("info,i", "print compute devices info")
+        ("benchmark,b", "benchmark compute devices")
         ("devices,d", po::value<std::string>(&devices), "set compute devices: -d 0,1,2")
         ("cfg,c", po::value<std::string>(&cfg), "set decode pattern [required]")
         ;
@@ -119,6 +124,11 @@ int main(int argc, char *argv[])
     if (vm.count("info"))
     {
         print_info();
+        return 0;
+    }
+    if (vm.count("benchmark"))
+    {
+        benchmark();
         return 0;
     }
     if (!vm.count("input-file") || !vm.count("cfg"))
