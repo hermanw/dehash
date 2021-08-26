@@ -11,10 +11,16 @@ Decoder::Decoder(Cfg &cfg)
 :m_cfg(cfg)
 ,m_benchmark(false)
 {
+    m_p_hash = 0;
+    m_p_number = 0;
+    m_p_helper = 0;
 }
 
 Decoder::~Decoder()
 {
+    if(m_p_hash) delete[] m_p_hash;
+    if(m_p_number) delete[] m_p_number;
+    if(m_p_helper) delete[] m_p_helper;
 }
 
 int Decoder::is_valid_digit(const char c)
@@ -126,7 +132,7 @@ void Decoder::dedup_sorted_hash()
     }
 }
 
-void Decoder::update_result(char *p_data, int data_length)
+void Decoder::update_result()
 {
     m_data.resize(m_hash_len);
     for (int i = 0; i < m_hash_len; i++)
@@ -134,9 +140,15 @@ void Decoder::update_result(char *p_data, int data_length)
         int index = m_hash[i].index;
         if (i < m_dedup_len)
         {
-            for (int j = 0; j < data_length; j++)
+            for(auto &result : m_results)
             {
-                m_data[index] += p_data[i*data_length + j];
+                if (result[0])
+                {
+                    for (int j = 0; j < m_input_length; j++)
+                    {
+                        m_data[index] += result[i*m_input_length + j];
+                    }
+                }
             }
         }
         else
@@ -147,8 +159,9 @@ void Decoder::update_result(char *p_data, int data_length)
     }
 }
 
-void Decoder::get_result(std::string& result)
+std::string Decoder::get_result()
 {
+    std::string result;
     for (int h = 0; h < m_hash_len; h++)
     {
         result += m_hash_string[h];
@@ -156,6 +169,7 @@ void Decoder::get_result(std::string& result)
         result += m_data[h];
         result += '\n';
     }
+    return result;
 }
 
 void Decoder::set_hash_string(const char *s)
@@ -165,8 +179,8 @@ void Decoder::set_hash_string(const char *s)
     dedup_sorted_hash();
 
     // build options string
-    data_length = m_cfg.length;
-    m_options << "-D DATA_LENGTH=" << data_length;
+    m_input_length = m_cfg.length;
+    m_options << "-D DATA_LENGTH=" << m_input_length;
     std::vector<std::string> XYZ = {"X", "Y", "Z"};
     for(int i = 0; i < m_cfg.gpu_sections.size(); i++)
     {
@@ -178,7 +192,6 @@ void Decoder::set_hash_string(const char *s)
 
     //// build host buffers
     // build hash buffer
-    hash_length = m_dedup_len;
     m_p_hash = new Hash[m_dedup_len];
     for (int i = 0; i < m_dedup_len; i++)
     {
@@ -206,11 +219,10 @@ void Decoder::set_hash_string(const char *s)
             break;
         }
     }
-    long list_length = listds_length * m_cfg.sources[listds_source].size();
-    helper_length = list_length;
-    if (list_length > 0)
+    m_helper_length = listds_length * m_cfg.sources[listds_source].size();
+    if (m_helper_length > 0)
     {
-        m_p_helper = new char[list_length];
+        m_p_helper = new char[m_helper_length];
         long offset = 0;
         for(auto& s : m_cfg.sources[listds_source])
         {
@@ -219,6 +231,12 @@ void Decoder::set_hash_string(const char *s)
                 m_p_helper[offset++] = s[i];
             }
         }
+    }
+    else
+    {
+        // not used
+        m_helper_length = 1;
+        m_p_helper = new char[m_helper_length];
     }
 }
 
@@ -256,31 +274,47 @@ bool Decoder::run_in_kernel()
     {
         m_mtx.lock();
         ready = m_input_ready;
+        if (total_decoded() == m_dedup_len)
+        {
+            m_done = true;
+            m_mtx.unlock();
+            std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
+            return true;
+        }
         m_mtx.unlock();
     } while (ready);
 
-    // int count = kernel->run(input, m_dedup_len, data_length, m_cfg.kernel_work_size);
+    if (!m_benchmark)
+    {
+        if (m_iterations)
+        {
+            std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
+        }
+        m_iterations++;
+        for(int i = 0; i < m_cfg.length; i++)
+        {
+            char c = m_input[i];
+            std::cout << (c ? c : '*');
+        }
+        std::cout << "(" << m_iterations * 100 / m_iterations_len << "%)";
+    }
 
-    // m_iterations++;
-    // std::cout << "\033[1A" << count << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s - searching " ;
-    // int data_length = m_cfg.length;
-    // for(int i = 0; i < data_length; i++)
-    // {
-    //     char c = input[i];
-    //     std::cout << (c ? c : '*');
-    // }
-    // std::cout << ", " << m_iterations * 100 / m_iterations_len << "%\n";
-
-    // return (count == m_dedup_len);
     return false;
 }
 
-void Decoder::thread_function(Device *device, std::mutex *mutex)
+int Decoder::total_decoded()
+{
+    int count = 0;
+    for (auto i : m_counter) count += i;
+    return count;
+}
+
+void Decoder::thread_function(int thread_id, Device *device, std::mutex *mutex)
 {
     std::lock_guard<std::mutex> guard(*mutex);
 
     device->init(m_options.str().c_str());
-    device->create_buffers(m_p_hash, m_p_number, m_p_helper, hash_length, data_length, helper_length);
+    device->create_buffers(m_p_hash, m_p_number, m_p_helper, m_dedup_len, m_input_length, m_helper_length);
 
     while(1)
     {
@@ -288,17 +322,16 @@ void Decoder::thread_function(Device *device, std::mutex *mutex)
         if (m_done)
         {
             m_mtx.unlock();
+            device->read_results(m_results[thread_id], m_dedup_len * m_input_length);
             return;
         }
         else if (m_input_ready)
         {
             auto start = std::chrono::steady_clock::now();
-            // std::cout << m_input;
-            device->submit(m_input, hash_length, data_length);
+            device->submit(m_input, m_dedup_len, m_input_length);
             m_input_ready = false;
             m_mtx.unlock();
-            int count = device->run(m_cfg.kernel_work_size);
-            // std::cout << ":" << count << std::endl;
+            m_counter[thread_id] = device->run(m_cfg.kernel_work_size);
             if (m_benchmark)
             {
                 auto end = std::chrono::steady_clock::now();
@@ -328,23 +361,31 @@ std::vector<std::string> split(const std::string& s, char delimiter)
    return tokens;
 }
 
-void Decoder::decode(const std::string &devices)
+std::string Decoder::decode(const std::string &devices)
 {
     // start threads for each device
-    m_input = new uint8_t[data_length]();
+    std::cout << "using compute devices:" << std::endl;
+    m_input = new uint8_t[m_input_length]();
     m_input_ready = false;
     m_done = false;
 
     std::vector<std::mutex*> thread_mutex;
     auto dp = new DevicePool();
     std::vector<std::string> list = split(devices, ',');
-    for(auto &index :list)
+    m_counter.resize(list.size());
+    for (int i = 0; i < list.size(); i++)
     {
+        // alloc result buffer
+        char *p_data = new char[m_dedup_len * m_input_length]();
+        m_results.push_back(p_data);
+
+        // start threads
         auto mutex = new std::mutex();
         thread_mutex.push_back(mutex);
-        auto device = dp->get_device(std::stoi(index));
-        std::thread t(&Decoder::thread_function, this, device, mutex);
-        t.detach();       
+        auto device = dp->get_device(std::stoi(list[i]));
+        std::thread t(&Decoder::thread_function, this, i, device, mutex);
+        t.detach();
+        std::cout << "  " << list[i] << ". " << device->info << std::endl;
     }
 
     m_start = time(NULL);
@@ -367,13 +408,8 @@ void Decoder::decode(const std::string &devices)
     delete dp;
     delete[] m_input;
 
-
-    // read results
-    // int result_length = m_dedup_len * data_length;
-    // char *p_data = new char[result_length];
-    // kernel->read_results(p_data, result_length);
-    // update_result(p_data, data_length);
-    // delete[] p_data;
+    update_result();
+    return get_result();
 }
 
 void Decoder::benchmark()

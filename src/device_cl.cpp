@@ -143,10 +143,6 @@ void DeviceCl::create_buffers(void* p_hash, void* p_number, void* p_helper, int 
     number_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 40000, p_number, &error);
     CheckCLError(error);
     clSetKernelArg(kernel, 3, sizeof(cl_mem), &number_buffer);
-    if(!helper_length)
-    {
-        helper_length = 1;
-    }
     helper_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, helper_length, p_helper, &error);
     CheckCLError(error);
     clSetKernelArg(kernel, 4, sizeof(cl_mem), &helper_buffer);
@@ -179,4 +175,12 @@ int DeviceCl::run(size_t kernel_work_size[3])
                                         &count,
                                         0, nullptr, nullptr));
     return count;
+}
+
+void DeviceCl::read_results(void* p_data, int length)
+{
+    CheckCLError(clEnqueueReadBuffer(queue, data_buffer, CL_TRUE, 0,
+                                     length,
+                                     p_data,
+                                     0, nullptr, nullptr));
 }

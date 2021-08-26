@@ -30,9 +30,8 @@ public:
     void set_hash_string(const char *s);
     int get_hash_len() const { return m_hash_len; }
     int get_dedup_len() const { return m_dedup_len; }
-    void update_result(char *p_data, int data_length);
-    void get_result(std::string &result);
-    void decode(const std::string &devices);
+    std::string get_result();
+    std::string decode(const std::string &devices);
     void benchmark();
 
 private:
@@ -46,7 +45,9 @@ private:
     void dedup_sorted_hash();
     bool run_in_host(int index);
     bool run_in_kernel();
-    void thread_function(Device *device, std::mutex *mutex);
+    void thread_function(int thread_id, Device *device, std::mutex *mutex);
+    int total_decoded();
+    void update_result();
 
 private:
     Cfg &m_cfg;
@@ -66,15 +67,16 @@ private:
     // for threads
     std::mutex m_mtx;
     uint8_t *m_input;
+    int m_input_length;
     bool m_input_ready;
     bool m_done;
+    std::vector<int> m_counter;
+    std::vector<char*> m_results;
     // buffers
     Hash *m_p_hash;
     char *m_p_number;
     char *m_p_helper;
-    int hash_length;
-    int data_length;
-    int helper_length;
+    int m_helper_length;
 };
 
 #endif

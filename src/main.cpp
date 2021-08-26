@@ -69,17 +69,16 @@ void benchmark()
     }
 }
 
-void decode(const std::string &str, std::string &result, const std::string &devices, Cfg &cfg)
+std::string decode(const std::string &str, const std::string &devices, Cfg &cfg)
 {
     Decoder decoder(cfg);
     decoder.set_hash_string(str.c_str());
-    // const int hash_len = decoder.get_hash_len();
-    // const int dedup_len = decoder.get_dedup_len();
-    // std::cout << "find " << hash_len << " hashes (" << hash_len - dedup_len << " duplicated, " << dedup_len << " unique)\n";
-    // std::cout << "using decode pattern \"" << cfg. << "\"" << std::endl;
+    const int hash_len = decoder.get_hash_len();
+    const int dedup_len = decoder.get_dedup_len();
+    std::cout << "find " << hash_len << " hashes (" << hash_len - dedup_len << " duplicated, " << dedup_len << " unique)\n";
+    std::cout << "using decode pattern \"" << cfg.cfg_name << "\"" << std::endl;
 
-    decoder.decode(devices);
-    // decoder.get_result(result);
+    return decoder.decode(devices);
 }
 
 int main(int argc, char *argv[])
@@ -156,8 +155,7 @@ int main(int argc, char *argv[])
 
     // decode
     auto thecfg = new Cfg("config.json", cfg.c_str());
-    std::string result;
-    decode(str, result, devices, *thecfg);
+    std::string result = decode(str, devices, *thecfg);
     delete thecfg;
 
     // write reults

@@ -5,6 +5,8 @@
 
 Cfg::Cfg(const char *filename, const char *cfg_name)
 {
+    this->cfg_name = cfg_name;
+    
     std::ifstream file(filename);
     if (!file.is_open())
     {

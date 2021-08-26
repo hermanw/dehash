@@ -19,7 +19,7 @@ public:
     virtual void create_buffers(void* p_hash, void* p_number, void* p_helper, int hash_length, int data_length,int helper_length);
     virtual void submit(void *input, int hash_length, int data_length);
     virtual int run(size_t kernel_work_size[3]);
-    // virtual void get_result();
+    virtual void read_results(void* p_data, int length);
     static void enum_cl_devices(std::vector<Device*> &list);
 
 public:

@@ -28,6 +28,7 @@ public:
     std::vector<struct DataSection> gpu_sections;
     std::map<std::string, std::vector<std::string>> sources;
     size_t kernel_work_size[3] = {1, 1, 1};
+    std::string cfg_name;
 
     Cfg(const char *filename, const char *cfg_name);
 
