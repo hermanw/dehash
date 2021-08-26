@@ -178,6 +178,7 @@ void Decoder::set_hash_string(const char *s)
 
     //// build host buffers
     // build hash buffer
+    hash_length = m_dedup_len;
     m_p_hash = new Hash[m_dedup_len];
     for (int i = 0; i < m_dedup_len; i++)
     {
@@ -206,10 +207,10 @@ void Decoder::set_hash_string(const char *s)
         }
     }
     long list_length = listds_length * m_cfg.sources[listds_source].size();
-    char* m_p_helper = new char[list_length];
     helper_length = list_length;
     if (list_length > 0)
     {
+        m_p_helper = new char[list_length];
         long offset = 0;
         for(auto& s : m_cfg.sources[listds_source])
         {
@@ -292,12 +293,12 @@ void Decoder::thread_function(Device *device, std::mutex *mutex)
         else if (m_input_ready)
         {
             auto start = std::chrono::steady_clock::now();
-            std::cout << m_input;
+            // std::cout << m_input;
             device->submit(m_input, hash_length, data_length);
             m_input_ready = false;
             m_mtx.unlock();
             int count = device->run(m_cfg.kernel_work_size);
-            std::cout << ":" << count << std::endl;
+            // std::cout << ":" << count << std::endl;
             if (m_benchmark)
             {
                 auto end = std::chrono::steady_clock::now();
@@ -386,7 +387,7 @@ void Decoder::benchmark()
         std::cout << i << ". " << dp->get_device(i)->info << std::endl;
         m_kernel_score = 0;
         decode(std::to_string(i));
-        std::cout << "----score: " << m_kernel_score << std::endl;
+        std::cout << "   score: " << m_kernel_score << std::endl;
     }
     delete dp;
 }

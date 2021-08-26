@@ -54,13 +54,19 @@ void benchmark()
     Decoder decoder(*thecfg);
     decoder.set_hash_string("f3cf9924949207114472783ed41aa9ee,757295d360508357f8ac682c432416f3,ec7adbba8ee2f1481821b879541fdb7e,eeb1f4145fe2adb38356cd665cf0a179,3f3a4159a9340300c8db318831152f14,cc32ce34137a758ee009bd521e00177f,e2577739aee99b47211b4e23b9ce802b,26b3e34f0b1c139693c725a2dd79b3d4,ef5e10e0d2d0134ac37d89fbf98539c0,6e39bf085901f95c7123ff9205e3f9c2");
     decoder.benchmark();
-
-    // // write dehash.ini
-    // std::ofstream file("dehash.ini");
-    // file << "platform = " << platform_index << "\n";
-    // file << "device = " << device_index << "\n";
-    // file.close();
     delete thecfg;
+
+    // write dehash.ini
+    std::cout << "--------\nyou can choose to save devices list in dehash.ini\n";
+    std::cout << "input like 0,1,2 (enter to skip):";
+    std::string list;
+    std::getline(std::cin, list);
+    if (list.size())
+    {
+        std::ofstream file("dehash.ini");
+        file << "devices = " << list << "\n";
+        file.close();
+    }
 }
 
 void decode(const std::string &str, std::string &result, const std::string &devices, Cfg &cfg)

@@ -143,8 +143,12 @@ void DeviceCl::create_buffers(void* p_hash, void* p_number, void* p_helper, int 
     number_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, 40000, p_number, &error);
     CheckCLError(error);
     clSetKernelArg(kernel, 3, sizeof(cl_mem), &number_buffer);
+    if(!helper_length)
+    {
+        helper_length = 1;
+    }
     helper_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, helper_length, p_helper, &error);
-    // CheckCLError(error);
+    CheckCLError(error);
     clSetKernelArg(kernel, 4, sizeof(cl_mem), &helper_buffer);
     input_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, data_length, 0, &error);
     CheckCLError(error);
