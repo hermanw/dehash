@@ -21,6 +21,11 @@ Decoder::~Decoder()
     if(m_p_hash) delete[] m_p_hash;
     if(m_p_number) delete[] m_p_number;
     if(m_p_helper) delete[] m_p_helper;
+    for(auto &result : m_results)
+    {
+        delete result;
+    }
+    m_results.clear();
 }
 
 int Decoder::is_valid_digit(const char c)
@@ -140,9 +145,9 @@ void Decoder::update_result()
         int index = m_hash[i].index;
         if (i < m_dedup_len)
         {
-            for(auto &result : m_results)
+            for(auto result : m_results)
             {
-                if (result[0])
+                if (result[i*m_input_length] != 0)
                 {
                     for (int j = 0; j < m_input_length; j++)
                     {
