@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <mutex>
 #include "device.h"
 #include "cfg.h"
 

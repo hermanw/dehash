@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <chrono>
 #include <thread>
-#include <mutex>
 #include "decoder.h"
 #include "device_pool.h"
 
@@ -341,9 +340,10 @@ void Decoder::thread_function(int thread_id, Device *device, std::mutex *mutex)
             {
                 auto end = std::chrono::steady_clock::now();
                 auto e = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-                if (m_kernel_score == 0 || m_kernel_score > e)
+                auto score = 100000/e;
+                if (m_kernel_score < score)
                 {
-                    m_kernel_score = e;
+                    m_kernel_score = score;
                 }
             }
         }
@@ -369,7 +369,10 @@ std::vector<std::string> split(const std::string& s, char delimiter)
 std::string Decoder::decode(const std::string &devices)
 {
     // start threads for each device
-    std::cout << "using compute devices:" << std::endl;
+    if (!m_benchmark)
+    {
+        std::cout << "using compute devices:" << std::endl;
+    }
     m_input = new uint8_t[m_input_length]();
     m_input_ready = false;
     m_done = false;
@@ -390,7 +393,10 @@ std::string Decoder::decode(const std::string &devices)
         auto device = dp->get_device(std::stoi(list[i]));
         std::thread t(&Decoder::thread_function, this, i, device, mutex);
         t.detach();
-        std::cout << "  " << list[i] << ". " << device->info << std::endl;
+        if (!m_benchmark)
+        {
+            std::cout << "  " << list[i] << ". " << device->info << std::endl;
+        }
     }
 
     m_start = time(NULL);
@@ -428,7 +434,7 @@ void Decoder::benchmark()
         std::cout << i << ". " << dp->get_device(i)->info << std::endl;
         m_kernel_score = 0;
         decode(std::to_string(i));
-        std::cout << "   score: " << m_kernel_score << std::endl;
+        std::cout << "   perf: " << m_kernel_score << "MH/s" << std::endl;
     }
     delete dp;
 }
