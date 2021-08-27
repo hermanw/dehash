@@ -131,7 +131,8 @@ DeviceCl::~DeviceCl()
 void DeviceCl::create_buffers(void* p_hash, void* p_number, void* p_helper, int hash_length, int data_length,int helper_length)
 {
     cl_int error = CL_SUCCESS;
-    count_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(int), 0, &error);
+    int count = 0;
+    count_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(int), &count, &error);
     CheckCLError(error);
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &count_buffer);
     data_buffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, hash_length * data_length, 0, &error);
