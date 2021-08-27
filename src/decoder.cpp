@@ -282,7 +282,6 @@ bool Decoder::run_in_kernel()
         {
             m_done = true;
             m_mtx.unlock();
-            std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
             return true;
         }
         m_mtx.unlock();
@@ -418,6 +417,11 @@ std::string Decoder::decode(const std::string &devices)
 
     delete dp;
     delete[] m_input;
+
+    if (!m_benchmark)
+    {
+        std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
+    }
 
     update_result();
     return get_result();
