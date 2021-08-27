@@ -14,6 +14,8 @@ if(APPLE)
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 endif()
 
+include("cmake/BuildInfo.cmake")
+
 find_package(OpenCL REQUIRED)
 include_directories(${OpenCL_INCLUDE_DIR})
 

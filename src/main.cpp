@@ -4,6 +4,7 @@
 #include <string>
 #include <boost/program_options.hpp>
 
+#include "buildinfo.h"
 #include "decoder.h"
 #include "device_pool.h"
 
@@ -36,7 +37,7 @@ void write_to_file(const std::string &filename, std::string &str)
 
 void print_version()
 {
-    std::cout << "hash decoder 0.1, by herman\n";
+    std::cout << "hash decoder by herman, version: " << BuildInfo::version_string << std::endl;
 }
 
 void print_info()
@@ -75,6 +76,7 @@ std::string decode(const std::string &str, const std::string &devices, Cfg &cfg)
     decoder.set_hash_string(str.c_str());
     const int hash_len = decoder.get_hash_len();
     const int dedup_len = decoder.get_dedup_len();
+    std::cout << "----\n";
     std::cout << "find " << hash_len << " hashes (" << hash_len - dedup_len << " duplicated, " << dedup_len << " unique)\n";
     std::cout << "using decode pattern \"" << cfg.cfg_name << "\"" << std::endl;
 
@@ -119,6 +121,7 @@ int main(int argc, char *argv[])
     if (vm.count("help"))
     {
         std::cout << desc ;
+        std::cout << "example: dehash -c mobile -d 0,2 hashfile.csv\n";
         return 0;
     }
     if (vm.count("version"))
