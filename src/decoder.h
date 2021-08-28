@@ -49,6 +49,7 @@ private:
     void thread_function(int thread_id, Device *device, std::mutex *mutex);
     int total_decoded();
     void update_result();
+    void print_progress();
 
 private:
     Cfg &m_cfg;

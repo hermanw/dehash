@@ -291,9 +291,10 @@ bool Decoder::run_in_kernel()
     {
         if (m_iterations)
         {
-            std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
+            print_progress();
         }
         m_iterations++;
+        std::cout << "\033[1A";
         for(int i = 0; i < m_cfg.length; i++)
         {
             char c = m_input[i];
@@ -365,6 +366,11 @@ std::vector<std::string> split(const std::string& s, char delimiter)
    return tokens;
 }
 
+void Decoder::print_progress()
+{
+    std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
+}
+
 std::string Decoder::decode(const std::string &devices)
 {
     // start threads for each device
@@ -405,6 +411,7 @@ std::string Decoder::decode(const std::string &devices)
     {
         m_iterations_len *= m_cfg.sources[ds.source].size();
     }
+    if (!m_benchmark) std::cout << std::endl;
     run_in_host(0);
     m_mtx.lock();
     m_done = true;
@@ -420,7 +427,7 @@ std::string Decoder::decode(const std::string &devices)
 
     if (!m_benchmark)
     {
-        std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
+        print_progress();
     }
 
     update_result();

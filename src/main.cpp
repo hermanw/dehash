@@ -40,6 +40,12 @@ void print_version()
     std::cout << "hash decoder by herman, version: " << BuildInfo::version_string << std::endl;
 }
 
+void print_help(boost::program_options::options_description &desc)
+{
+    std::cout << desc ;
+    std::cout << "example: dehash -c mobile -d 0,2 hashfile.csv\n";
+}
+
 void print_info()
 {
     std::cout << "compute devices:\n";
@@ -87,12 +93,12 @@ int main(int argc, char *argv[])
 {
     // check dehash.ini
     std::ifstream ini("dehash.ini");
-    if (!ini.good())
-    {
-        // run for the first time
-        print_info();
-        return 0;
-    }
+    // if (!ini.good())
+    // {
+    //     // run for the first time
+    //     print_info();
+    //     return 0;
+    // }
 
     // handle program options
     std::string devices;
@@ -115,13 +121,12 @@ int main(int argc, char *argv[])
         ;
     po::variables_map vm;
     po::store(po::command_line_parser(argc, argv).options(cmdline_options).positional(p).run(), vm);
-    po::store(po::parse_config_file("dehash.ini", desc), vm);
+    if (ini.good()) po::store(po::parse_config_file("dehash.ini", desc), vm);
     po::notify(vm);
 
     if (vm.count("help"))
     {
-        std::cout << desc ;
-        std::cout << "example: dehash -c mobile -d 0,2 hashfile.csv\n";
+        print_help(desc);
         return 0;
     }
     if (vm.count("version"))
@@ -139,9 +144,9 @@ int main(int argc, char *argv[])
         benchmark();
         return 0;
     }
-    if (!vm.count("input-file") || !vm.count("cfg"))
+    if (!vm.count("input-file") || !vm.count("cfg") || !vm.count("devices"))
     {
-        std::cout << desc ;
+        print_help(desc);
         return 0;
     }
 

@@ -1,5 +1,11 @@
 # dehash (work in progress...)
 
+## Features
+* decode using multiple gpu devices in parellel
+* support OpenCL devices (//TODO: CUDA)
+* support MD5 hash algorithm (//TODO: ...)
+* support customisable decode pattern
+
 ## Build
 
 ### Dependencies
