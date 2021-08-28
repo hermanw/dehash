@@ -43,7 +43,9 @@ void print_version()
 void print_help(boost::program_options::options_description &desc)
 {
     std::cout << desc ;
-    std::cout << "example: dehash -c mobile -d 0,2 hashfile.csv\n";
+    std::cout << "examples:\n";
+    std::cout << "  dehash -c mobile -d 0,2 hashfile.csv\n";
+    std::cout << "  dehash -c mobile -d 0,2 -s 757295d360508357f8ac682c432416f3\n";
 }
 
 void print_info()
@@ -91,18 +93,10 @@ std::string decode(const std::string &str, const std::string &devices, Cfg &cfg)
 
 int main(int argc, char *argv[])
 {
-    // check dehash.ini
-    std::ifstream ini("dehash.ini");
-    // if (!ini.good())
-    // {
-    //     // run for the first time
-    //     print_info();
-    //     return 0;
-    // }
-
     // handle program options
     std::string devices;
     std::string cfg;
+    std::string hashstring;
     namespace po = boost::program_options;
     po::options_description desc("usage: dehash [option] filename\noptions");
     desc.add_options()
@@ -112,6 +106,7 @@ int main(int argc, char *argv[])
         ("benchmark,b", "benchmark compute devices")
         ("devices,d", po::value<std::string>(&devices), "set compute devices: -d 0,1,2")
         ("cfg,c", po::value<std::string>(&cfg), "set decode pattern [required]")
+        ("string,s", po::value<std::string>(&hashstring), "hash string")
         ;
     po::positional_options_description p;
     p.add("input-file", -1);
@@ -121,7 +116,10 @@ int main(int argc, char *argv[])
         ;
     po::variables_map vm;
     po::store(po::command_line_parser(argc, argv).options(cmdline_options).positional(p).run(), vm);
-    if (ini.good()) po::store(po::parse_config_file("dehash.ini", desc), vm);
+    if (std::ifstream("dehash.ini").good())
+    {
+        po::store(po::parse_config_file("dehash.ini", desc), vm);
+    }
     po::notify(vm);
 
     if (vm.count("help"))
@@ -144,28 +142,40 @@ int main(int argc, char *argv[])
         benchmark();
         return 0;
     }
-    if (!vm.count("input-file") || !vm.count("cfg") || !vm.count("devices"))
+
+    if (vm.count("cfg") && vm.count("devices"))
     {
-        print_help(desc);
-        return 0;
+        if (vm.count("input-file"))
+        {
+            print_version();
+            // process hash file
+            auto filename = vm["input-file"].as<std::string>();
+            std::string str;
+            if (!(read_from_file(filename, str)))
+            {
+                std::cout << "file " << filename << " not found\n";
+                return 1;
+            }
+
+            // decode
+            auto thecfg = new Cfg("config.json", cfg.c_str());
+            std::string result = decode(str, devices, *thecfg);
+            delete thecfg;
+
+            // write reults
+            write_to_file(filename, result);
+            return 0;
+        }
+        else if (vm.count("string"))
+        {
+            print_version();
+            auto thecfg = new Cfg("config.json", cfg.c_str());
+            std::string result = decode(hashstring, devices, *thecfg);
+            delete thecfg;
+            std::cout << result;
+            return 0;
+        }
     }
 
-    print_version();
-
-    // process hash file
-    auto filename = vm["input-file"].as<std::string>();
-    std::string str;
-    if (!(read_from_file(filename, str)))
-    {
-        std::cout << "file " << filename << " not found\n";
-        return 1;
-    }
-
-    // decode
-    auto thecfg = new Cfg("config.json", cfg.c_str());
-    std::string result = decode(str, devices, *thecfg);
-    delete thecfg;
-
-    // write reults
-    write_to_file(filename, result);
+    print_help(desc);
 }
