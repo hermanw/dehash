@@ -101,12 +101,12 @@ void DeviceCl::init(const char *options)
 
     kernel = clCreateKernel(program, "compute", &error);
     CheckCLError(error);
-#ifdef __APPLE__
-    queue = clCreateCommandQueue(context, device_id,
-                                 0, &error);
-#else
+#if CL_VERSION_2_0
     queue = clCreateCommandQueueWithProperties(context, device_id,
                                                0, &error);
+#else
+    queue = clCreateCommandQueue(context, device_id,
+                                 0, &error);
 #endif
     CheckCLError(error);
 
