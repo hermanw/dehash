@@ -10,17 +10,30 @@ HunterGate(
 
 project(dehash)
 
+option(USE_OPENCL "Build with OpenCL" ON)
+option(USE_CUDA "Build with CUDA" OFF)
+
+if (USE_OPENCL)
+    add_definitions(-DUSE_OPENCL)
+    find_package(OpenCL REQUIRED)
+    include_directories(${OpenCL_INCLUDE_DIR})
+    add_subdirectory(src/opencl)
+endif()
+
 if(APPLE)
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 endif()
 
 include("cmake/BuildInfo.cmake")
 
-find_package(OpenCL REQUIRED)
-include_directories(${OpenCL_INCLUDE_DIR})
 
 hunter_add_package(Boost COMPONENTS program_options)
 find_package(Boost CONFIG REQUIRED program_options)
 
-add_executable(dehash src/main.cpp src/cfg.cpp src/decoder.cpp src/device_pool.cpp src/device.cpp src/device_cl.cpp)
-target_link_libraries(dehash ${OpenCL_LIBRARY} Boost::program_options)
+file(GLOB sources "src/*.cpp")
+add_executable(dehash ${sources})
+target_link_libraries(dehash Boost::program_options)
+if (USE_OPENCL)
+    target_link_libraries(dehash device_cl)
+endif()
+
