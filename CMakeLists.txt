@@ -11,13 +11,18 @@ HunterGate(
 project(dehash)
 
 option(USE_OPENCL "Build with OpenCL" ON)
-option(USE_CUDA "Build with CUDA" OFF)
+option(USE_CUDA "Build with CUDA" ON)
 
 if (USE_OPENCL)
     add_definitions(-DUSE_OPENCL)
     find_package(OpenCL REQUIRED)
     include_directories(${OpenCL_INCLUDE_DIR})
     add_subdirectory(src/opencl)
+endif()
+if (USE_CUDA)
+    add_definitions(-DUSE_CUDA)
+    enable_language(CUDA)
+    add_subdirectory(src/cuda)
 endif()
 
 if(APPLE)
@@ -36,4 +41,6 @@ target_link_libraries(dehash Boost::program_options)
 if (USE_OPENCL)
     target_link_libraries(dehash device_cl)
 endif()
-
+if (USE_CUDA)
+    target_link_libraries(dehash device_cu)
+endif()
