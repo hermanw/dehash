@@ -58,7 +58,6 @@ private:
     std::vector<std::string> m_hash_string;
     std::vector<SortedHash> m_hash;
     std::vector<std::string> m_data;
-    std::ostringstream m_options;
     // for progress
     time_t m_start;
     int m_iterations;
@@ -68,17 +67,19 @@ private:
     long m_kernel_score;
     // for threads
     std::mutex m_mtx;
-    uint8_t *m_input;
-    int m_input_length;
     bool m_input_ready;
     bool m_done;
     std::vector<int> m_counter;
     std::vector<char*> m_results;
     // buffers
+    uint8_t *m_p_input;
+    int m_input_size;
     Hash *m_p_hash;
+    int m_hash_size;
     char *m_p_number;
+    int m_number_size;
     char *m_p_helper;
-    int m_helper_length;
+    int m_helper_size;
 };
 
 #endif

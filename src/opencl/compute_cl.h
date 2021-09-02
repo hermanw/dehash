@@ -1,3 +1,4 @@
+static const char *const compute_cl = R"(
 #define BLOCK_LEN 64 // In bytes
 #define LENGTH_SIZE 8 // In bytes
 
@@ -111,11 +112,11 @@ static void md5_compress(uint4* state, const uchar block[64])
 
 __kernel void compute(
     __global int* p_count,
-    __global uchar* p_data,
+    __constant uchar* p_input,
+    __global uchar* p_output,
     __global const ulong2* p_hash,
     __constant uchar* p_number,
     __constant uchar* p_helper,
-    __constant uchar* input,
     int hash_len)
 {
     if(*p_count >= hash_len) return;
@@ -125,7 +126,7 @@ __kernel void compute(
     data[DATA_LENGTH] = 0x80;
     data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(DATA_LENGTH << 3);
     for (int i = 0; i < DATA_LENGTH; i++) {
-        data[i] = input[i];
+        data[i] = p_input[i];
     }
 
 #ifdef X_TYPE
@@ -218,10 +219,11 @@ __kernel void compute(
                 int offset = mid * DATA_LENGTH;
                 for (int j = 0; j < DATA_LENGTH; j++)
                 {
-                    p_data[offset + j] = data[j];
+                    p_output[offset + j] = data[j];
                 }
                 break;
             }
         }
     } while (low <= high);
 }
+)";
