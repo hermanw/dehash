@@ -15,8 +15,6 @@ option(USE_CUDA "Build with CUDA" ON)
 
 if (USE_OPENCL)
     add_definitions(-DUSE_OPENCL)
-    find_package(OpenCL REQUIRED)
-    include_directories(${OpenCL_INCLUDE_DIR})
     add_subdirectory(src/opencl)
 endif()
 if (USE_CUDA)
@@ -37,6 +35,7 @@ find_package(Boost CONFIG REQUIRED program_options)
 
 file(GLOB sources "src/*.cpp")
 add_executable(dehash ${sources})
+
 target_link_libraries(dehash Boost::program_options)
 if (USE_OPENCL)
     target_link_libraries(dehash device_cl)

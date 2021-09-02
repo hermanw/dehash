@@ -13,4 +13,5 @@ public:
 
 private:
     std::vector<Device*> m_devices_list;
+    void enum_devices();
 };

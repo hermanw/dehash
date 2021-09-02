@@ -20,7 +20,6 @@ public:
     virtual void submit(void *input, int hash_length, int data_length);
     virtual int run(size_t kernel_work_size[3]);
     virtual void read_results(void* p_data, int length);
-    static void enum_cl_devices(std::vector<Device*> &list);
 
 public:
     cl_platform_id platform_id;

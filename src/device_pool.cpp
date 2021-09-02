@@ -1,9 +1,15 @@
 #include <iostream>
 #include "device_pool.h"
+#ifdef USE_OPENCL
+#include "opencl/enumerator_cl.h"
+#endif
+#ifdef USE_CUDA
+#include "cuda/enumerator_cu.h"
+#endif
 
 DevicePool::DevicePool()
 {
-    Device::enum_devices(m_devices_list);
+    enum_devices();
 }
 
 DevicePool::~DevicePool()
@@ -32,4 +38,14 @@ void DevicePool::print_info()
     {
         std::cout << index++ << ". " << device->info << std::endl;
     }
+}
+
+void DevicePool::enum_devices()
+{
+#ifdef USE_OPENCL
+    EnumeratorCl::enum_devices(m_devices_list);
+#endif
+#ifdef USE_CUDA
+    EnumeratorCu::enum_devices(m_devices_list);
+#endif
 }
