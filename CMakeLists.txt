@@ -33,6 +33,7 @@ include("cmake/BuildInfo.cmake")
 hunter_add_package(Boost COMPONENTS program_options)
 find_package(Boost CONFIG REQUIRED program_options)
 
+include_directories(src)
 file(GLOB sources "src/*.cpp")
 add_executable(dehash ${sources})
 
