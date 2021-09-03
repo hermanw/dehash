@@ -23,6 +23,12 @@ void check(cudaError_t e, int const line)
 #define BLOCK_LEN 64 // In bytes
 #define LENGTH_SIZE 8 // In bytes
 
+struct ULONG2
+{
+    unsigned long long x;
+    unsigned long long y;
+};
+
 struct GpuSection
 {
     ds_type type;
@@ -30,12 +36,11 @@ struct GpuSection
     int length;
 };
 
-
 __global__ void compute(
     uint* p_count,
     const uchar* p_input,
     uchar* p_output,
-    const ulong2* p_hash,
+    const ULONG2* p_hash,
     const uchar* p_number,
     const uchar* p_helper,
     int hash_len,
@@ -57,24 +62,24 @@ __global__ void compute(
     for (int i = 0; i < gpu_section_size; i++)
     {
         uint index = 0;
-        if(i==0) index = blockIdx.x;
+        if(i==0) index = blockIdx.x*100 + threadIdx.x;
         else if(i==1) index = blockIdx.y;
         else index = blockIdx.z;
 
         if(gs[i].type == ds_type_list)
         {
             uint offset = index * gs[i].length;
-            for (uint i = 0; i < gs[i].length; i++)
+            for (uint j = 0; j < gs[i].length; j++)
             {
-                data[gs[i].index + i] = p_helper[offset + i];
+                data[gs[i].index + j] = p_helper[offset + j];
             }
         }
         else if(gs[i].type == ds_type_digit)
         {
             uint offset = (index << 2) + 4 - gs[i].length;
-            for (uint i = 0; i < gs[i].length; i++)
+            for (uint j = 0; j < gs[i].length; j++)
             {
-                data[gs[i].index + i] = p_number[offset + i];
+                data[gs[i].index + j] = p_number[offset + j];
             }
         }
         else if(gs[i].type == ds_type_idsum)
@@ -93,20 +98,21 @@ __global__ void compute(
         }
     }
 
+
     // hash
     uint4 hash = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476};
 
     md5(&hash, data);
 
-    ulong2 bhash;
-    bhash.x = hash.x << 32 + hash.y;
-    bhash.y = hash.z << 32 + hash.w;
+    ULONG2 bhash;
+    bhash.x = (unsigned long long)hash.x; bhash.x += (unsigned long long)hash.y << 32;
+    bhash.y = (unsigned long long)hash.z; bhash.y += (unsigned long long)hash.w << 32;
     int low = 0;
     int high = hash_len - 1;
     do
     {
         int mid = (low + high) / 2;
-        ulong2 ahash = p_hash[mid];
+        ULONG2 ahash = p_hash[mid];
         if(ahash.x < bhash.x)
         {
             low = mid + 1;
@@ -121,7 +127,7 @@ __global__ void compute(
             else if (ahash.y > bhash.y) {high = mid - 1;}
             else
             {
-                atomicInc(p_count, 1);
+                atomicAdd(p_count, 1);
                 int offset = mid * data_length;
                 for (int j = 0; j < data_length; j++)
                 {
@@ -206,14 +212,16 @@ int DeviceCu::run(size_t kernel_work_size[3])
     compute<<<numBlocks, 100>>> ((uint*)d_count_buffer, 
                                     (const uchar*)d_input_buffer, 
                                     (uchar*)d_output_buffer, 
-                                    (const ulong2*)d_hash_buffer, 
+                                    (const ULONG2*)d_hash_buffer, 
                                     (const uchar*)d_number_buffer, 
                                     (const uchar*)d_helper_buffer,
                                     m_hash_buffer_size, data_length, gpu_section_size, d_gs);
     
+    int count = 0;
+    check_error(cudaMemcpy(&count, d_count_buffer, sizeof(int), cudaMemcpyDeviceToHost));
     check_error(cudaDeviceSynchronize());
     cudaFree(d_gs);
-    return 0;
+    return count;
 }
 
 void DeviceCu::read_results(void* p_output, int length)
