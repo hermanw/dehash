@@ -334,7 +334,7 @@ void Decoder::thread_function(int thread_id, Device *device, std::mutex *mutex)
             device->submit(m_p_input, m_input_size, m_hash_size);
             m_input_ready = false;
             m_mtx.unlock();
-            m_counter[thread_id] = device->run(m_cfg.kernel_work_size);
+            m_counter[thread_id] = device->run();
             if (m_benchmark)
             {
                 auto end = std::chrono::steady_clock::now();

@@ -1,20 +1,5 @@
 static const char *const compute_cl = R"(
-#define BLOCK_LEN 64 // In bytes
-#define LENGTH_SIZE 8 // In bytes
-
-// macro from compiler
-// #define DATA_LENGTH 18
-// #define X_INDEX 0
-// #define X_LENGTH 6
-// #define X_TYPE 0
-// #define Y_INDEX 6
-// #define Y_LENGTH 3
-// #define Y_TYPE 1
-// #define Z_INDEX 17
-// #define Z_LENGTH 1
-// #define Z_TYPE 2
-
-static void md5_compress(uint4* state, const uchar block[64])
+DEVICE_FUNC_PREFIX void md5(uint4* state, const uchar block[64])
 {
     unsigned int schedule[16];
     schedule[0] = (unsigned int)block[0 * 4 + 0] << 0 | (unsigned int)block[0 * 4 + 1] << 8 | (unsigned int)block[0 * 4 + 2] << 16 | (unsigned int)block[0 * 4 + 3] << 24;
@@ -34,10 +19,10 @@ static void md5_compress(uint4* state, const uchar block[64])
     schedule[14] = (unsigned int)block[14 * 4 + 0] << 0 | (unsigned int)block[14 * 4 + 1] << 8 | (unsigned int)block[14 * 4 + 2] << 16 | (unsigned int)block[14 * 4 + 3] << 24;
     schedule[15] = (unsigned int)block[15 * 4 + 0] << 0 | (unsigned int)block[15 * 4 + 1] << 8 | (unsigned int)block[15 * 4 + 2] << 16 | (unsigned int)block[15 * 4 + 3] << 24;
 
-    unsigned int a = state->s0;
-    unsigned int b = state->s1;
-    unsigned int c = state->s2;
-    unsigned int d = state->s3;
+    unsigned int a = state->x;
+    unsigned int b = state->y;
+    unsigned int c = state->z;
+    unsigned int d = state->w;
 
     a = a + (d ^ (b & (c ^ d))) + (0xD76AA478U) + schedule[0]; a = b + ((((a)) << (7)) | ((a) >> (32 - (7))));
     d = d + (c ^ (a & (b ^ c))) + (0xE8C7B756U) + schedule[1]; d = a + ((((d)) << (12)) | ((d) >> (32 - (12))));
@@ -104,11 +89,25 @@ static void md5_compress(uint4* state, const uchar block[64])
     c = c + (a ^ (d | ~b)) + (0x2AD7D2BBU) + schedule[2]; c = d + ((((c)) << (15)) | ((c) >> (32 - (15))));
     b = b + (d ^ (c | ~a)) + (0xEB86D391U) + schedule[9]; b = c + ((((b)) << (21)) | ((b) >> (32 - (21))));
 
-    state->s0 += a;
-    state->s1 += b;
-    state->s2 += c;
-    state->s3 += d;
+    state->x += a;
+    state->y += b;
+    state->z += c;
+    state->w += d;
 }
+#define BLOCK_LEN 64 // In bytes
+#define LENGTH_SIZE 8 // In bytes
+
+// macro from compiler
+// #define DATA_LENGTH 18
+// #define X_INDEX 0
+// #define X_LENGTH 6
+// #define X_TYPE 0
+// #define Y_INDEX 6
+// #define Y_LENGTH 3
+// #define Y_TYPE 1
+// #define Z_INDEX 17
+// #define Z_LENGTH 1
+// #define Z_TYPE 2
 
 __kernel void compute(
     __global int* p_count,
@@ -192,7 +191,7 @@ __kernel void compute(
     // hash
     uint4 hash = (uint4)(0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476);
 
-    md5_compress(&hash, data);
+    md5(&hash, data);
 
     ulong2 bhash = as_ulong2(hash);
     int low = 0;

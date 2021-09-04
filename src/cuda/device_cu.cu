@@ -7,6 +7,7 @@
 typedef unsigned char uchar;
 typedef unsigned int uint;
 
+#define DEVICE_FUNC_PREFIX __device__
 #include "md5.inc"
 
 void check(cudaError_t e, int const line)
@@ -22,6 +23,7 @@ void check(cudaError_t e, int const line)
 
 #define BLOCK_LEN 64 // In bytes
 #define LENGTH_SIZE 8 // In bytes
+#define THREAD_NUM 500
 
 struct ULONG2
 {
@@ -62,7 +64,8 @@ __global__ void compute(
     for (int i = 0; i < gpu_section_size; i++)
     {
         uint index = 0;
-        if(i==0) index = blockIdx.x*100 + threadIdx.x;
+        // THIS IS A TRICKY: always break the 1st gpu section into blocks and threads
+        if(i==0) index = blockIdx.x*THREAD_NUM + threadIdx.x;
         else if(i==1) index = blockIdx.y;
         else index = blockIdx.z;
 
@@ -143,6 +146,12 @@ void DeviceCu::init(Cfg &cfg)
 {
     m_cfg = &cfg;
     check_error(cudaSetDevice(m_device));
+
+    // kernel_work_size maps to 3 gpu sections
+    // THIS IS A TRICKY: always break the 1st gpu section into blocks and threads
+    numBlocks.x = m_cfg->kernel_work_size[0] / THREAD_NUM;
+    numBlocks.y = m_cfg->kernel_work_size[1];
+    numBlocks.z = m_cfg->kernel_work_size[2];
 }
 
 DeviceCu::~DeviceCu()
@@ -153,6 +162,7 @@ DeviceCu::~DeviceCu()
     cudaFree(d_hash_buffer);
     cudaFree(d_number_buffer);
     cudaFree(d_helper_buffer);
+    cudaFree(d_gs);
 }
 
 void DeviceCu::create_buffers(
@@ -177,24 +187,7 @@ void DeviceCu::create_buffers(
 
     check_error(cudaMalloc((void**)&d_helper_buffer, helper_buffer_size));
     check_error(cudaMemcpy(d_helper_buffer, p_helper, helper_buffer_size, cudaMemcpyHostToDevice));
-}
 
-void DeviceCu::submit(void *p_input, int input_buffer_size, int hash_buffer_size)
-{
-    m_hash_buffer_size = hash_buffer_size;
-    check_error(cudaMemcpy(d_input_buffer, p_input, input_buffer_size, cudaMemcpyHostToDevice));
-    check_error(cudaDeviceSynchronize());
-}
-
-int DeviceCu::run(size_t kernel_work_size[3])
-{
-    // TODO: need revisit
-    dim3 numBlocks(kernel_work_size[0], kernel_work_size[1], kernel_work_size[2]);
-    if (numBlocks.x > 100) numBlocks.x /= 100;
-    else if (numBlocks.y > 100) numBlocks.y /= 100;
-    else if (numBlocks.z > 100) numBlocks.z /= 100;
-
-    int data_length = m_cfg->length;
     int gpu_section_size = m_cfg->gpu_sections.size();
     GpuSection gs[3];
     for(int i = 0; i < gpu_section_size; i++)
@@ -204,23 +197,32 @@ int DeviceCu::run(size_t kernel_work_size[3])
         gs[i].length = ds.length;
         gs[i].type = ds.type;
     }
-
-    GpuSection *d_gs;
     check_error(cudaMalloc((void**)&d_gs, sizeof(GpuSection)*3));
     check_error(cudaMemcpy(d_gs, gs, sizeof(GpuSection)*3, cudaMemcpyHostToDevice));
+}
 
-    compute<<<numBlocks, 100>>> ((uint*)d_count_buffer, 
+void DeviceCu::submit(void *p_input, int input_buffer_size, int hash_buffer_size)
+{
+    m_hash_buffer_size = hash_buffer_size;
+    check_error(cudaMemcpy(d_input_buffer, p_input, input_buffer_size, cudaMemcpyHostToDevice));
+    check_error(cudaDeviceSynchronize());
+}
+
+int DeviceCu::run()
+{
+    int data_length = m_cfg->length;
+    int gpu_section_size = m_cfg->gpu_sections.size();
+    compute<<<numBlocks, THREAD_NUM>>> ((uint*)d_count_buffer, 
                                     (const uchar*)d_input_buffer, 
                                     (uchar*)d_output_buffer, 
                                     (const ULONG2*)d_hash_buffer, 
                                     (const uchar*)d_number_buffer, 
                                     (const uchar*)d_helper_buffer,
-                                    m_hash_buffer_size, data_length, gpu_section_size, d_gs);
+                                    m_hash_buffer_size, data_length, gpu_section_size, (GpuSection *)d_gs);
     
     int count = 0;
     check_error(cudaMemcpy(&count, d_count_buffer, sizeof(int), cudaMemcpyDeviceToHost));
     check_error(cudaDeviceSynchronize());
-    cudaFree(d_gs);
     return count;
 }
 

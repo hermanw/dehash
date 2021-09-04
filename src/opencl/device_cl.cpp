@@ -17,9 +17,11 @@ void _CheckCLError(cl_int error, int line)
 
 void DeviceCl::init(Cfg &cfg)
 {
+    m_cfg = &cfg;
     // build options string
     std::ostringstream options;
-    options << "-D DATA_LENGTH=" << cfg.length;
+    options << "-D DEVICE_FUNC_PREFIX=static";
+    options << " -D DATA_LENGTH=" << cfg.length;
     std::vector<std::string> XYZ = {"X", "Y", "Z"};
     for(int i = 0; i < cfg.gpu_sections.size(); i++)
     {
@@ -126,11 +128,11 @@ void DeviceCl::submit(void *p_input, int input_buffer_size, int hash_buffer_size
 
 }
 
-int DeviceCl::run(size_t kernel_work_size[3])
+int DeviceCl::run()
 {
     CheckCLError(clEnqueueNDRangeKernel(queue, kernel, 3,
                                         nullptr,
-                                        kernel_work_size,
+                                        m_cfg->kernel_work_size,
                                         nullptr,
                                         0, nullptr, nullptr));
 

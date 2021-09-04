@@ -2,7 +2,7 @@
 
 ## Features
 * decode using multiple gpu devices in parellel
-* support OpenCL devices (//TODO: CUDA)
+* support OpenCL/CUDA devices
 * support MD5 hash algorithm (//TODO: ...)
 * support customisable decode pattern
 

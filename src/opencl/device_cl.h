@@ -22,7 +22,7 @@ public:
                     void *p_number, int number_buffer_size,
                     void *p_helper, int helper_buffer_size);
     virtual void submit(void *p_input, int input_buffer_size, int hash_buffer_size);
-    virtual int run(size_t kernel_work_size[3]);
+    virtual int run();
     virtual void read_results(void* p_output, int length);
 
 public:
@@ -30,6 +30,7 @@ public:
     cl_device_id device_id;
 
 private:
+    Cfg *m_cfg;
     cl_context context = 0;
     cl_program program = 0;
     cl_kernel kernel = 0;

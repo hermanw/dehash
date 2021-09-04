@@ -126,15 +126,15 @@
         ],
         "gpu_sections": [
             {
+                "type": "digit",
+                "index": 14,
+                "length": 3
+            },
+            {
                 "type": "list",
                 "index": 0,
                 "length": 6,
                 "source":"mca"
-            },
-            {
-                "type": "digit",
-                "index": 14,
-                "length": 3
             },
             {
                 "type": "idsum",

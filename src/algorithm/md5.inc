@@ -1,4 +1,4 @@
-__device__ static void md5(uint4* state, const uchar block[64])
+DEVICE_FUNC_PREFIX void md5(uint4* state, const uchar block[64])
 {
     unsigned int schedule[16];
     schedule[0] = (unsigned int)block[0 * 4 + 0] << 0 | (unsigned int)block[0 * 4 + 1] << 8 | (unsigned int)block[0 * 4 + 2] << 16 | (unsigned int)block[0 * 4 + 3] << 24;
