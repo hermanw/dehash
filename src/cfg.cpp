@@ -1,7 +1,37 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
+#include "nlohmann/json.hpp"
 #include "cfg.h"
+
+using json = nlohmann::json;
+
+void set_data_section(DataSection &ds, json &item)
+{
+    auto type =item["type"];
+    if(type == "list")
+    {
+        ds.type =  ds_type_list;
+    }
+    else if(type == "digit")
+    {
+        ds.type =  ds_type_digit;
+    }
+    else if(type == "idsum")
+    {
+        ds.type =  ds_type_idsum;
+    }
+    else if(type == "char")
+    {
+        ds.type =  ds_type_char;
+    }
+    ds.index = item["index"];
+    ds.length = item["length"];
+    if (item.contains("source"))
+    {
+        ds.source = item["source"];
+    }
+}
 
 Cfg::Cfg(const char *filename, const char *cfg_name)
 {
@@ -17,7 +47,6 @@ Cfg::Cfg(const char *filename, const char *cfg_name)
     stream << file.rdbuf();
     file.close();
 
-    using json = nlohmann::json;
     auto j = json::parse(stream.str())[cfg_name];
     // length
     length = j["length"];
@@ -53,32 +82,5 @@ Cfg::Cfg(const char *filename, const char *cfg_name)
         {
             kernel_work_size[kernel_index++] = sources[ds.source].size();
         }
-    }
-}
-
-void Cfg::set_data_section(DataSection &ds, nlohmann::json &item)
-{
-    auto type =item["type"];
-    if(type == "list")
-    {
-        ds.type =  ds_type_list;
-    }
-    else if(type == "digit")
-    {
-        ds.type =  ds_type_digit;
-    }
-    else if(type == "idsum")
-    {
-        ds.type =  ds_type_idsum;
-    }
-    else if(type == "char")
-    {
-        ds.type =  ds_type_char;
-    }
-    ds.index = item["index"];
-    ds.length = item["length"];
-    if (item.contains("source"))
-    {
-        ds.source = item["source"];
     }
 }

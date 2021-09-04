@@ -2,7 +2,6 @@
 
 #include <vector>
 #include <map>
-#include "nlohmann/json.hpp"
 
 enum ds_type
 {
@@ -31,7 +30,4 @@ public:
     std::string cfg_name;
 
     Cfg(const char *filename, const char *cfg_name);
-
-private:
-    void set_data_section(DataSection &ds, nlohmann::json &item);
 };
