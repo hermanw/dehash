@@ -57,9 +57,7 @@ __global__ void compute(
     uchar data[BLOCK_LEN]= {0};
     data[data_length] = 0x80;
     data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(data_length << 3);
-    for (int i = 0; i < data_length; i++) {
-        data[i] = p_input[i];
-    }
+    memcpy(data, p_input, data_length);
 
     for (int i = 0; i < gpu_section_size; i++)
     {
@@ -72,18 +70,12 @@ __global__ void compute(
         if(gs[i].type == ds_type_list)
         {
             uint offset = index * gs[i].length;
-            for (uint j = 0; j < gs[i].length; j++)
-            {
-                data[gs[i].index + j] = p_helper[offset + j];
-            }
+            memcpy(data+gs[i].index, p_helper+offset, gs[i].length);
         }
         else if(gs[i].type == ds_type_digit)
         {
             uint offset = (index << 2) + 4 - gs[i].length;
-            for (uint j = 0; j < gs[i].length; j++)
-            {
-                data[gs[i].index + j] = p_number[offset + j];
-            }
+            memcpy(data+gs[i].index, p_number+offset, gs[i].length);
         }
         else if(gs[i].type == ds_type_idsum)
         {
@@ -212,14 +204,14 @@ int DeviceCu::run()
 {
     int data_length = m_cfg->length;
     int gpu_section_size = m_cfg->gpu_sections.size();
-    compute<<<numBlocks, THREAD_NUM>>> ((uint*)d_count_buffer, 
-                                    (const uchar*)d_input_buffer, 
-                                    (uchar*)d_output_buffer, 
-                                    (const ULONG2*)d_hash_buffer, 
-                                    (const uchar*)d_number_buffer, 
-                                    (const uchar*)d_helper_buffer,
-                                    m_hash_buffer_size, data_length, gpu_section_size, (GpuSection *)d_gs);
-    
+    compute<<<numBlocks, THREAD_NUM>>>((uint *)d_count_buffer,
+                                       (const uchar *)d_input_buffer,
+                                       (uchar *)d_output_buffer,
+                                       (const ULONG2 *)d_hash_buffer,
+                                       (const uchar *)d_number_buffer,
+                                       (const uchar *)d_helper_buffer,
+                                       m_hash_buffer_size, data_length, gpu_section_size, (GpuSection *)d_gs);
+
     int count = 0;
     check_error(cudaMemcpy(&count, d_count_buffer, sizeof(int), cudaMemcpyDeviceToHost));
     check_error(cudaDeviceSynchronize());
