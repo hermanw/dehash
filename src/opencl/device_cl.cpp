@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <cstring>
 #include "device_cl.h"
 #include "compute_cl.h"
 
