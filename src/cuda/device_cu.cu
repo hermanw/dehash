@@ -38,46 +38,25 @@ struct GpuSection
     int length;
 };
 
-__global__ void compute(
-    uint* p_count,
-    const uchar* p_input,
-    uchar* p_output,
-    const ULONG2* p_hash,
-    const uchar* p_number,
-    const uchar* p_helper,
-    int hash_len,
-    int data_length,
-    int gpu_section_size,
-    GpuSection *gs
-    )
+__device__ __inline__ void fill_data(int index, GpuSection &gs, uchar *data, const uchar* p_number, const uchar* p_helper)
 {
-    if(*p_count >= hash_len) return;
-
-    // fill data
-    uchar data[BLOCK_LEN]= {0};
-    data[data_length] = 0x80;
-    data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(data_length << 3);
-    memcpy(data, p_input, data_length);
-
-    for (int i = 0; i < gpu_section_size; i++)
+    switch (gs.type)
     {
-        uint index = 0;
-        // THIS IS A TRICKY: always break the 1st gpu section into blocks and threads
-        if(i==0) index = blockIdx.x*THREAD_NUM + threadIdx.x;
-        else if(i==1) index = blockIdx.y;
-        else index = blockIdx.z;
+    case ds_type_list:
+        {
+            uint offset = index * gs.length;
+            memcpy(data+gs.index, p_helper+offset, gs.length);
+        }
+        break;
+    
+    case ds_type_digit:
+        {
+            uint offset = (index << 2) + 4 - gs.length;
+            memcpy(data+gs.index, p_number+offset, gs.length);
+        }
+        break;
 
-        if(gs[i].type == ds_type_list)
-        {
-            uint offset = index * gs[i].length;
-            memcpy(data+gs[i].index, p_helper+offset, gs[i].length);
-        }
-        else if(gs[i].type == ds_type_digit)
-        {
-            uint offset = (index << 2) + 4 - gs[i].length;
-            memcpy(data+gs[i].index, p_number+offset, gs[i].length);
-        }
-        else if(gs[i].type == ds_type_idsum)
+    case ds_type_idsum:
         {
             const uchar COE[17] = {7,9,10,5,8,4,2,1,6,3,7,9,10,5,8,4,2};
             const uchar C_SUM[11] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'X'};
@@ -89,10 +68,39 @@ __global__ void compute(
             uint r = sum % 11;
             r = 12 - r;
             r = r>10?r-11:r;
-            data[gs[i].index] =C_SUM[r];
+            data[gs.index] =C_SUM[r];
         }
+        break;
     }
+}
 
+__global__ void compute(
+    uint* p_count,
+    const uchar* p_input,
+    uchar* p_output,
+    const ULONG2* p_hash,
+    const uchar* p_number,
+    const uchar* p_helper,
+    int hash_len,
+    int data_length,
+    GpuSection *gs
+    )
+{
+    // if(*p_count >= hash_len) return;
+
+    // fill data
+    uchar data[BLOCK_LEN]= {0};
+    data[data_length] = 0x80;
+    data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(data_length << 3);
+    memcpy(data, p_input, data_length);
+
+    // THIS IS A TRICKY: always break the 1st gpu section into blocks and threads
+    uint index = blockIdx.x*THREAD_NUM + threadIdx.x;
+    fill_data(index, gs[0], data, p_number, p_helper);
+    index = blockIdx.y;
+    fill_data(index, gs[1], data, p_number, p_helper);
+    index = blockIdx.z;
+    fill_data(index, gs[2], data, p_number, p_helper);
 
     // hash
     uint4 hash = {0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476};
@@ -124,10 +132,7 @@ __global__ void compute(
             {
                 atomicAdd(p_count, 1);
                 int offset = mid * data_length;
-                for (int j = 0; j < data_length; j++)
-                {
-                    p_output[offset + j] = data[j];
-                }
+                memcpy(p_output+offset, data, data_length);
                 break;
             }
         }
@@ -182,6 +187,9 @@ void DeviceCu::create_buffers(
 
     int gpu_section_size = m_cfg->gpu_sections.size();
     GpuSection gs[3];
+    gs[0].type = ds_type_unknow;
+    gs[1].type = ds_type_unknow;
+    gs[2].type = ds_type_unknow;
     for(int i = 0; i < gpu_section_size; i++)
     {
         auto &ds = m_cfg->gpu_sections[i];
@@ -203,14 +211,13 @@ void DeviceCu::submit(void *p_input, int input_buffer_size, int hash_buffer_size
 int DeviceCu::run()
 {
     int data_length = m_cfg->length;
-    int gpu_section_size = m_cfg->gpu_sections.size();
     compute<<<numBlocks, THREAD_NUM>>>((uint *)d_count_buffer,
                                        (const uchar *)d_input_buffer,
                                        (uchar *)d_output_buffer,
                                        (const ULONG2 *)d_hash_buffer,
                                        (const uchar *)d_number_buffer,
                                        (const uchar *)d_helper_buffer,
-                                       m_hash_buffer_size, data_length, gpu_section_size, (GpuSection *)d_gs);
+                                       m_hash_buffer_size, data_length, (GpuSection *)d_gs);
 
     int count = 0;
     check_error(cudaMemcpy(&count, d_count_buffer, sizeof(int), cudaMemcpyDeviceToHost));

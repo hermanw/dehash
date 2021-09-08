@@ -5,6 +5,7 @@
 
 enum ds_type
 {
+    ds_type_unknow = -1,
     ds_type_list,
     ds_type_digit,
     ds_type_idsum,
