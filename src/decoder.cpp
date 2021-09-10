@@ -1,5 +1,4 @@
 #include <iostream>
-#include <sstream>
 #include <algorithm>
 #include <chrono>
 #include <thread>
@@ -29,39 +28,13 @@ Decoder::~Decoder()
     m_results.clear();
 }
 
-int Decoder::is_valid_digit(const char c)
-{
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-}
-char Decoder::hexToNibble(char n)
-{
-    if (n >= 'a' && n <= 'f')
-    {
-        return n - 'a' + 10;
-    }
-    else if (n >= 'A' && n <= 'F')
-    {
-        return n - 'A' + 10;
-    }
-    else
-    {
-        return n - '0';
-    }
-}
-void Decoder::hex_to_bytes(uint8_t *to, const char *from, int len)
-{
-    for (int i = 0; i < len / 2; i++)
-    {
-        to[i] = (hexToNibble(from[i * 2]) << 4) + hexToNibble(from[i * 2 + 1]);
-    }
-}
 
 void Decoder::update_hash(const char *a_hash_string, int index)
 {
     m_hash_string.push_back(std::string(a_hash_string));
     SortedHash sh;
     sh.index = index;
-    hex_to_bytes((uint8_t *)(sh.hash.value), a_hash_string, HASH_LEN);
+    HASH_UTIL::hex_to_bytes((uint8_t *)(sh.hash.value), a_hash_string, HASH_LEN);
     m_hash.push_back(sh);
 }
 
@@ -81,7 +54,7 @@ void Decoder::parse_hash_string(const char *s)
             }
             valid_digit_num = 0;
         }
-        else if (is_valid_digit(*s))
+        else if (HASH_UTIL::is_valid_digit(*s))
         {
             a_hash_string[valid_digit_num] = *s;
             valid_digit_num++;
@@ -96,34 +69,12 @@ void Decoder::parse_hash_string(const char *s)
     m_hash_len = count;
 }
 
-int Decoder::compare_hash_binary(const uint64_t *a, const uint64_t *b)
-{
-    for (int i = 0; i < STATE_LEN; i++)
-    {
-        if (a[i] < b[i])
-        {
-            return -1;
-        }
-        else if (a[i] > b[i])
-        {
-            return 1;
-        }
-    }
-
-    return 0;
-}
-
-bool Decoder::compare_hash(SortedHash &a, SortedHash &b)
-{
-    return compare_hash_binary(a.hash.value, b.hash.value) < 0;
-}
-
 void Decoder::dedup_sorted_hash()
 {
     m_dedup_len = m_hash_len;
     for (int i = 1; i < m_dedup_len; i++)
     {
-        if (compare_hash_binary(m_hash[i].hash.value, m_hash[i - 1].hash.value) == 0)
+        if (HASH_UTIL::compare_hash_binary(m_hash[i].hash.value, m_hash[i - 1].hash.value) == 0)
         {
             SortedHash temp = m_hash[i];
             temp.index_dup = m_hash[i - 1].index;
@@ -181,7 +132,7 @@ std::string Decoder::get_result()
 void Decoder::set_hash_string(const char *s)
 {
     parse_hash_string(s);
-    std::sort(m_hash.begin(), m_hash.end(), compare_hash);
+    std::sort(m_hash.begin(), m_hash.end(), HASH_UTIL::compare_hash);
     dedup_sorted_hash();
 
     //// build host buffers
@@ -353,18 +304,6 @@ void Decoder::thread_function(int thread_id, Device *device, std::mutex *mutex)
     }
 }
 
-std::vector<std::string> split(const std::string& s, char delimiter)
-{
-   std::vector<std::string> tokens;
-   std::string token;
-   std::istringstream tokenStream(s);
-   while (std::getline(tokenStream, token, delimiter))
-   {
-      tokens.push_back(token);
-   }
-   return tokens;
-}
-
 void Decoder::print_progress()
 {
     std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
@@ -382,7 +321,7 @@ std::string Decoder::decode(const std::string &devices)
 
     std::vector<std::mutex*> thread_mutex;
     auto dp = new DevicePool();
-    std::vector<std::string> list = split(devices, ',');
+    std::vector<std::string> list = HASH_UTIL::split(devices, ',');
     m_counter.resize(list.size());
     for (int i = 0; i < list.size(); i++)
     {

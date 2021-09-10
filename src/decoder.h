@@ -6,22 +6,7 @@
 #include <mutex>
 #include "device.h"
 #include "cfg.h"
-
-#define HASH_LEN 32
-#define BLOCK_LEN 64 // In bytes
-#define STATE_LEN 2  // In dwords
-
-typedef struct
-{
-    uint64_t value[STATE_LEN];
-} Hash;
-
-typedef struct
-{
-    int index;
-    int index_dup;
-    Hash hash;
-} SortedHash;
+#include "hash_util.h"
 
 class Decoder
 {
@@ -36,13 +21,8 @@ public:
     void benchmark();
 
 private:
-    int is_valid_digit(const char c);
-    char hexToNibble(char n);
-    void hex_to_bytes(uint8_t *to, const char *from, int len);
     void update_hash(const char *hash_string, int index);
     void parse_hash_string(const char *s);
-    static int compare_hash_binary(const uint64_t *a, const uint64_t *b);
-    static bool compare_hash(SortedHash &a, SortedHash &b);
     void dedup_sorted_hash();
     bool run_in_host(int index);
     bool run_in_kernel();
