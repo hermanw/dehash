@@ -3,10 +3,12 @@
 
 #include <vector>
 #include <string>
+#include <thread>
 #include <mutex>
 #include "device.h"
 #include "cfg.h"
 #include "hash_util.h"
+#include "thread_queue.hpp"
 
 class Decoder
 {
@@ -24,10 +26,9 @@ private:
     void update_hash(const char *hash_string, int index);
     void parse_hash_string(const char *s);
     void dedup_sorted_hash();
-    bool run_in_host(int index);
-    bool run_in_kernel();
-    void thread_function(int thread_id, Device *device, std::mutex *mutex);
-    int total_decoded();
+    bool process_inputs(int section);
+    void compute_thread_f(int thread_id, Device *device);
+    void search_thread_f();
     void update_result();
     void print_progress();
 
@@ -45,17 +46,17 @@ private:
     // for benchmark
     bool m_benchmark;
     long m_kernel_score;
-    // for threads
-    std::mutex m_mtx;
-    bool m_input_ready;
+    // for gpu threads
+    ThreadQueue *m_thread_q;
     bool m_done;
-    std::vector<int> m_counter;
     std::vector<char*> m_results;
+    // for cpu threads
+    std::vector<std::thread*> m_cpu_threads;
     // buffers
     uint8_t *m_p_input;
     int m_input_size;
-    Hash *m_p_hash;
-    int m_hash_size;
+    Hash *m_p_output;
+    int m_output_size;
     char *m_p_number;
     int m_number_size;
     char *m_p_helper;

@@ -110,23 +110,18 @@ DEVICE_FUNC_PREFIX void md5(uint4* state, const uchar block[64])
 // #define Z_TYPE 2
 
 __kernel void compute(
-    __global int* p_count,
     __constant uchar* p_input,
-    __global uchar* p_output,
-    __global const ulong2* p_hash,
     __constant uchar* p_number,
     __constant uchar* p_helper,
-    int hash_len)
+    __global uint4* p_output)
 {
-    if(*p_count >= hash_len) return;
-
     // fill data
     uchar data[BLOCK_LEN]= {0};
-    data[DATA_LENGTH] = 0x80;
-    data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(DATA_LENGTH << 3);
-    for (int i = 0; i < DATA_LENGTH; i++) {
-        data[i] = p_input[i];
-    }
+    // data[DATA_LENGTH] = 0x80;
+    // data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(DATA_LENGTH << 3);
+    // for (int i = 0; i < DATA_LENGTH; i++) {
+    //     data[i] = p_input[i];
+    // }
 
 #ifdef X_TYPE
 #if X_TYPE == 0
@@ -190,39 +185,14 @@ __kernel void compute(
 
     // hash
     uint4 hash = (uint4)(0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476);
-
     md5(&hash, data);
-
-    ulong2 bhash = as_ulong2(hash);
-    int low = 0;
-    int high = hash_len - 1;
-    do
-    {
-        int mid = (low + high) / 2;
-        ulong2 ahash = p_hash[mid];
-        if(ahash.s0 < bhash.s0)
-        {
-            low = mid + 1;
-        }
-        else if (ahash.s0 > bhash.s0)
-        {
-            high = mid - 1;
-        }
-        else
-        {
-            if(ahash.s1 < bhash.s1) {low = mid + 1;}
-            else if (ahash.s1 > bhash.s1) {high = mid - 1;}
-            else
-            {
-                atomic_inc(p_count);
-                int offset = mid * DATA_LENGTH;
-                for (int j = 0; j < DATA_LENGTH; j++)
-                {
-                    p_output[offset + j] = data[j];
-                }
-                break;
-            }
-        }
-    } while (low <= high);
+    
+    size_t index = get_global_id(0);
+    index = index * get_global_size(1) + get_global_id(1);
+    index = index * get_global_size(2) + get_global_id(2);
+    (p_output + index)->x = hash.x;
+    (p_output + index)->y = hash.y;
+    (p_output + index)->z = hash.z;
+    (p_output + index)->w = hash.w;
 }
 )";

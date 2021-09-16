@@ -90,18 +90,23 @@
                 "index": 0,
                 "length": 3,
                 "source":"mobile_prefix"
+            },
+            {
+                "type": "digit",
+                "index": 3,
+                "length": 1
             }
         ],
         "gpu_sections": [
             {
                 "type": "digit",
-                "index": 3,
+                "index": 4,
                 "length": 4
             },
             {
                 "type": "digit",
-                "index": 7,
-                "length": 4
+                "index": 8,
+                "length": 3
             }
         ],
         "sources": {

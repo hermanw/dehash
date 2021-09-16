@@ -1,7 +1,7 @@
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 #include <chrono>
-#include <thread>
 #include "decoder.h"
 #include "device_pool.h"
 
@@ -9,16 +9,18 @@ Decoder::Decoder(Cfg &cfg)
 :m_cfg(cfg)
 ,m_benchmark(false)
 {
+    m_thread_q = new ThreadQueue(1);
     m_p_input = 0;
-    m_p_hash = 0;
+    m_p_output = 0;
     m_p_number = 0;
     m_p_helper = 0;
 }
 
 Decoder::~Decoder()
 {
+    delete m_thread_q;
     if(m_p_input) delete[] m_p_input;
-    if(m_p_hash) delete[] m_p_hash;
+    if(m_p_output) delete[] m_p_output;
     if(m_p_number) delete[] m_p_number;
     if(m_p_helper) delete[] m_p_helper;
     for(auto &result : m_results)
@@ -140,13 +142,9 @@ void Decoder::set_hash_string(const char *s)
     m_input_size = m_cfg.length;
     m_p_input = new uint8_t[m_input_size]();
 
-    // build hash buffer
-    m_hash_size = m_dedup_len;
-    m_p_hash = new Hash[m_hash_size];
-    for (int i = 0; i < m_hash_size; i++)
-    {
-        m_p_hash[i] = m_hash[i].hash;
-    }
+    // build output buffer
+    m_output_size = m_cfg.kernel_work_size[0] * m_cfg.kernel_work_size[1] * m_cfg.kernel_work_size[2];
+    m_p_output = new Hash[m_output_size];
     // build number buffer
     m_number_size = 10000 * 4;
     m_p_number = new char[m_number_size];
@@ -190,156 +188,128 @@ void Decoder::set_hash_string(const char *s)
     }
 }
 
-bool Decoder::run_in_host(int index)
+bool Decoder::process_inputs(int section)
 {
     int ds_size = m_cfg.cpu_sections.size();
     // done
-    if (index >= ds_size)
+    if (section >= ds_size)
     {
-        return run_in_kernel();
-    }
-    // fill host data and go to next section
-    auto &ds = m_cfg.cpu_sections[index];
-    auto &source = m_cfg.sources[ds.source];
-    for(auto &s : source)
-    {
-        for (int i = 0; i < s.size(); i++)
-        {
-            m_p_input[i + ds.index] = s[i];
-        }
-        if(run_in_host(index + 1))
-        {
-            return true;
-        }
+        m_thread_q->add();
+        return m_done;
     }
 
-    return false;
-}
-
-bool Decoder::run_in_kernel()
-{
-    m_input_ready = true;
-    bool ready = false;
-    do
+    // fill input data and go to next section
+    auto &ds = m_cfg.cpu_sections[section];
+    switch (ds.type)
     {
-        m_mtx.lock();
-        ready = m_input_ready;
-        if (total_decoded() == m_dedup_len)
+        case ds_type_list:
         {
-            m_done = true;
-            m_mtx.unlock();
-            return true;
-        }
-        m_mtx.unlock();
-    } while (ready);
-
-    if (!m_benchmark)
-    {
-        if (m_iterations)
-        {
-            print_progress();
-        }
-        m_iterations++;
-        std::cout << "\033[1A";
-        for(int i = 0; i < m_cfg.length; i++)
-        {
-            char c = m_p_input[i];
-            std::cout << (c ? c : '*');
-        }
-        std::cout << "(" << m_iterations * 100 / m_iterations_len << "%)";
-    }
-
-    return false;
-}
-
-int Decoder::total_decoded()
-{
-    int count = 0;
-    for (auto i : m_counter) count += i;
-    return count;
-}
-
-void Decoder::thread_function(int thread_id, Device *device, std::mutex *mutex)
-{
-    std::lock_guard<std::mutex> guard(*mutex);
-
-    device->init(m_cfg);
-    device->create_buffers(
-        m_input_size,
-        m_p_hash, m_hash_size, sizeof(Hash),
-        m_p_number, m_number_size,
-        m_p_helper, m_helper_size);
-
-    while(1)
-    {
-        m_mtx.lock();
-        if (m_done)
-        {
-            m_mtx.unlock();
-            device->read_results(m_results[thread_id], m_dedup_len * m_input_size);
-            return;
-        }
-        else if (m_input_ready)
-        {
-            auto start = std::chrono::steady_clock::now();
-            device->submit(m_p_input, m_input_size, m_hash_size);
-            m_input_ready = false;
-            m_mtx.unlock();
-            m_counter[thread_id] = device->run();
-            if (m_benchmark)
+            auto &source = m_cfg.sources[ds.source];
+            for(auto &s : source)
             {
-                auto end = std::chrono::steady_clock::now();
-                auto e = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-                auto score = 100000/e;
-                if (m_kernel_score < score)
+                for (int i = 0; i < s.size(); i++)
                 {
-                    m_kernel_score = score;
+                    m_p_input[i + ds.index] = s[i];
+                }
+                if(process_inputs(section + 1))
+                {
+                    return true;
                 }
             }
         }
-        else
+        break;
+
+        case ds_type_digit:
         {
-            m_mtx.unlock();
-        }        
+            size_t digits = pow(10, ds.length);
+            for( int digit = 0; digit < digits; digit++ )
+            {
+                int d = digit;
+                for( int offset = ds.length-1; offset >= 0; offset--)
+                {
+                    m_p_input[ds.index + offset] = '0' + d % 10;
+                    d /= 10;
+                }
+                if(process_inputs(section + 1))
+                {
+                    return true;
+                }
+            }
+        }
+        break;
+
+        default:
+        std::cerr << "ERROR: not supported cpu section type" << std::endl;
+        break;
+    }
+
+    return false;
+}
+
+void Decoder::compute_thread_f(int thread_id, Device *device)
+{
+    while(1)
+    {
+        m_thread_q->remove(device, [](Device *device){
+            device->submit_input();
+        });
+        if (m_done)
+        {
+            return;
+        }
+        auto start = std::chrono::steady_clock::now();
+        device->run(m_p_output, m_output_size*sizeof(Hash));
+        if (m_benchmark)
+        {
+            auto end = std::chrono::steady_clock::now();
+            auto e = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+            auto score = m_output_size/1000/e;
+            if (m_kernel_score < score)
+            {
+                m_kernel_score = score;
+            }
+        }
     }
 }
 
 void Decoder::print_progress()
 {
-    std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
+    // std::cout << " find " << total_decoded() << "/" << m_dedup_len << " @" << time(NULL) - m_start << "s\n" ;
 }
 
 std::string Decoder::decode(const std::string &devices)
 {
-    // start threads for each device
+    // start compute threads for each device
+    std::vector<std::thread *> gpu_threads;
     if (!m_benchmark)
     {
         std::cout << "using compute devices:" << std::endl;
     }
-    m_input_ready = false;
     m_done = false;
 
-    std::vector<std::mutex*> thread_mutex;
     auto dp = new DevicePool();
     std::vector<std::string> list = HASH_UTIL::split(devices, ',');
-    m_counter.resize(list.size());
     for (int i = 0; i < list.size(); i++)
     {
-        // alloc result buffer
-        char *p_data = new char[m_dedup_len * m_input_size]();
-        m_results.push_back(p_data);
-
-        // start threads
-        auto mutex = new std::mutex();
-        thread_mutex.push_back(mutex);
         auto device = dp->get_device(std::stoi(list[i]));
-        std::thread t(&Decoder::thread_function, this, i, device, mutex);
-        t.detach();
+        device->init(m_cfg);
+        device->create_buffers(
+            m_p_input, m_input_size,
+            m_p_number, m_number_size,
+            m_p_helper, m_helper_size,
+            m_output_size);
+        gpu_threads.push_back(new std::thread(&Decoder::compute_thread_f, this, i, device));
         if (!m_benchmark)
         {
             std::cout << "  " << list[i] << ". " << device->info << std::endl;
         }
     }
+
+    // start search threads
+
+        // // alloc result buffer
+        // char *p_data = new char[m_dedup_len * m_input_size]();
+        // m_results.push_back(p_data);
 
     m_start = time(NULL);
     m_iterations = 0;
@@ -349,15 +319,21 @@ std::string Decoder::decode(const std::string &devices)
         m_iterations_len *= m_cfg.sources[ds.source].size();
     }
     if (!m_benchmark) std::cout << std::endl;
-    run_in_host(0);
-    m_mtx.lock();
+    process_inputs(0);
+    
+    // notify all compute threads done
     m_done = true;
-    m_mtx.unlock();
-    for(auto mutex : thread_mutex)
+    for (int i = 0; i < list.size(); i++)
     {
-        mutex->lock();
-        delete mutex;
+        m_thread_q->add();
     }
+    for (auto& thread : gpu_threads)
+    {
+        if(thread->joinable())thread->join();
+        delete thread;
+    }
+    gpu_threads.clear();
+    // notify all search threads done
 
     delete dp;
 

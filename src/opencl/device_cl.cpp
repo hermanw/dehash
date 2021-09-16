@@ -4,6 +4,7 @@
 #include <cstring>
 #include "device_cl.h"
 #include "compute_cl.h"
+#include "hash_util.h"
 
 void _CheckCLError(cl_int error, int line)
 {
@@ -52,7 +53,6 @@ void DeviceCl::init(Cfg &cfg)
     const char *sources[1] = {compute_cl};
     program = clCreateProgramWithSource(context, 1, sources, lengths, &error);
     CheckCLError(error);
-    // program = CreateProgram("kernels/compute.cl", context);
 
     CheckCLError(clBuildProgram(program, num_devices, devices, options.str().c_str(), nullptr, nullptr));
 
@@ -72,10 +72,8 @@ void DeviceCl::init(Cfg &cfg)
 
 DeviceCl::~DeviceCl()
 {
-    if(count_buffer)clReleaseMemObject(count_buffer);
     if(input_buffer)clReleaseMemObject(input_buffer);
     if(output_buffer)clReleaseMemObject(output_buffer);
-    if(hash_buffer)clReleaseMemObject(hash_buffer);
     if(number_buffer)clReleaseMemObject(number_buffer);
     if(helper_buffer)clReleaseMemObject(helper_buffer);
 
@@ -86,67 +84,48 @@ DeviceCl::~DeviceCl()
 }
 
 void DeviceCl::create_buffers(
-    int input_buffer_size,
-    void *p_hash, int hash_buffer_size, int hash_length,
+    void *p_input, int input_buffer_size,
     void *p_number, int number_buffer_size,
-    void *p_helper, int helper_buffer_size)
+    void *p_helper, int helper_buffer_size,
+    int output_buffer_size)
 {
+    m_input = p_input;
+    m_input_size = input_buffer_size;
+
     cl_int error = CL_SUCCESS;
-    
-    int count = 0;
-    count_buffer = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, sizeof(int), &count, &error);
-    CheckCLError(error);
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &count_buffer);
 
     input_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, input_buffer_size, 0, &error);
     CheckCLError(error);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &input_buffer);
-
-    output_buffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, hash_buffer_size * input_buffer_size, 0, &error);
-    CheckCLError(error);
-    clSetKernelArg(kernel, 2, sizeof(cl_mem), &output_buffer);
-
-    hash_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, hash_buffer_size * hash_length, p_hash, &error);
-    CheckCLError(error);
-    clSetKernelArg(kernel, 3, sizeof(cl_mem), &hash_buffer);
+    clSetKernelArg(kernel, 0, sizeof(cl_mem), &input_buffer);
 
     number_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, number_buffer_size, p_number, &error);
     CheckCLError(error);
-    clSetKernelArg(kernel, 4, sizeof(cl_mem), &number_buffer);
+    clSetKernelArg(kernel, 1, sizeof(cl_mem), &number_buffer);
 
     helper_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, helper_buffer_size, p_helper, &error);
     CheckCLError(error);
-    clSetKernelArg(kernel, 5, sizeof(cl_mem), &helper_buffer);
+    clSetKernelArg(kernel, 2, sizeof(cl_mem), &helper_buffer);
+
+    output_buffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(Hash) * output_buffer_size, 0, &error);
+    CheckCLError(error);
+    clSetKernelArg(kernel, 3, sizeof(cl_mem), &output_buffer);
 }
 
-void DeviceCl::submit(void *p_input, int input_buffer_size, int hash_buffer_size)
+void DeviceCl::submit_input()
 {
-    clSetKernelArg(kernel, 6, sizeof(int), &hash_buffer_size);
     CheckCLError(clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0,
-                                        input_buffer_size,
-                                        p_input,
+                                        m_input_size,
+                                        m_input,
                                         0, nullptr, nullptr));
-
 }
 
-int DeviceCl::run()
+void DeviceCl::run(void *p_output, int length)
 {
     CheckCLError(clEnqueueNDRangeKernel(queue, kernel, 3,
                                         nullptr,
                                         m_cfg->kernel_work_size,
                                         nullptr,
                                         0, nullptr, nullptr));
-
-    int count = 0;
-    CheckCLError(clEnqueueReadBuffer(queue, count_buffer, CL_TRUE, 0,
-                                        sizeof(int),
-                                        &count,
-                                        0, nullptr, nullptr));
-    return count;
-}
-
-void DeviceCl::read_results(void* p_output, int length)
-{
     CheckCLError(clEnqueueReadBuffer(queue, output_buffer, CL_TRUE, 0,
                                      length,
                                      p_output,
