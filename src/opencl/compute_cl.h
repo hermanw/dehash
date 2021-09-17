@@ -117,11 +117,11 @@ __kernel void compute(
 {
     // fill data
     uchar data[BLOCK_LEN]= {0};
-    // data[DATA_LENGTH] = 0x80;
-    // data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(DATA_LENGTH << 3);
-    // for (int i = 0; i < DATA_LENGTH; i++) {
-    //     data[i] = p_input[i];
-    // }
+    data[DATA_LENGTH] = 0x80;
+    data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(DATA_LENGTH << 3);
+    for (int i = 0; i < DATA_LENGTH; i++) {
+        data[i] = p_input[i];
+    }
 
 #ifdef X_TYPE
 #if X_TYPE == 0

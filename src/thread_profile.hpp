@@ -1,6 +1,22 @@
 #pragma once
 
-// #ifdef THREAD_PROFILE
+// this file is for debug profiling purpose
+
+#define THREAD_PROFILE
+
+#ifdef THREAD_PROFILE
+    #define TP_BEGIN(id) tp_begin(id)
+    #define TP_END(id) tp_end(id)
+    #define PRINT_TP_DATA() print_tp_data()
+    #define TP_PIN() std::cout << __FILE__ << ": " << __LINE__ << std::endl
+#else
+    #define TP_BEGIN(id)
+    #define TP_END(id)
+    #define PRINT_TP_DATA()
+#endif
+
+#ifdef THREAD_PROFILE
+
 #include <iostream>
 #include <map>
 #include <vector>
@@ -37,6 +53,7 @@ void tp_end(string id)
 
 void print_tp_data()
 {
+    cout << "-- Thread Profile Begin --" << endl;
     for (auto &item : tp_data)
     {
         cout << item.first << endl;
@@ -46,10 +63,8 @@ void print_tp_data()
         }
         cout << endl;
     }
+    cout << "-- Thread Profile End --" << endl;
+    tp_data.clear();
 }
 
-// #endif
-
-#define TP_BEGIN(id) tp_begin(id)
-#define TP_END(id) tp_end(id)
-#define PRINT_TP_DATA() print_tp_data()
+#endif

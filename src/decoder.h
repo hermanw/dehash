@@ -29,6 +29,7 @@ private:
     bool process_inputs(int section);
     void compute_thread_f(int thread_id, Device *device);
     void search_thread_f();
+    void search_hash();
     void update_result();
     void print_progress();
 

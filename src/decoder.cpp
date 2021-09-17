@@ -195,11 +195,11 @@ bool Decoder::process_inputs(int section)
     // done
     if (section >= ds_size)
     {
-        TP_END("[main thread] working");
+        TP_END("[main thread] work");
         TP_BEGIN("[main thread] wait");
         m_thread_q->add();
         TP_END("[main thread] wait");
-        TP_BEGIN("[main thread] working");
+        TP_BEGIN("[main thread] work");
         return m_done;
     }
 
@@ -269,6 +269,7 @@ void Decoder::compute_thread_f(int thread_id, Device *device)
         TP_BEGIN("[compute thread " + std::to_string(thread_id) + "] compute");
         auto start = std::chrono::steady_clock::now();
         device->run(m_p_output, m_output_size*sizeof(Hash));
+        search_hash();
         if (m_benchmark)
         {
             auto end = std::chrono::steady_clock::now();
@@ -280,6 +281,33 @@ void Decoder::compute_thread_f(int thread_id, Device *device)
             }
         }
         TP_END("[compute thread " + std::to_string(thread_id) + "] compute");
+    }
+}
+
+void Decoder::search_hash()
+{
+    for (int i = 0; i < m_output_size; i++)
+    {
+        int low = 0;
+        int high = m_dedup_len - 1;
+        do
+        {
+            int mid = (low + high) / 2;
+            int r = HASH_UTIL::compare_hash_binary(m_hash[mid].hash.value, m_p_output[i].value);
+            if(r < 0)
+            {
+                low = mid + 1;
+            }
+            else if (r > 0)
+            {
+                high = mid - 1;
+            }
+            else
+            {
+                std::cout << "find " << i << std::endl;
+                break;
+            }
+        } while (low <= high);
     }
 }
 
@@ -297,6 +325,7 @@ std::string Decoder::decode(const std::string &devices)
         std::cout << "using compute devices:" << std::endl;
     }
     m_done = false;
+    m_data.resize(m_hash_len);
 
     auto dp = new DevicePool();
     std::vector<std::string> list = HASH_UTIL::split(devices, ',');
@@ -346,6 +375,7 @@ std::string Decoder::decode(const std::string &devices)
         delete thread;
     }
     gpu_threads.clear();
+
     // notify all search threads done
 
     delete dp;
@@ -355,8 +385,10 @@ std::string Decoder::decode(const std::string &devices)
         print_progress();
     }
 
-    update_result();
-    return get_result();
+    // update_result();
+    // return get_result();
+    PRINT_TP_DATA();
+    return "";
 }
 
 void Decoder::benchmark()
@@ -374,6 +406,4 @@ void Decoder::benchmark()
         std::cout << "   perf: " << m_kernel_score << "MH/s" << std::endl;
     }
     delete dp;
-
-    PRINT_TP_DATA();
 }
