@@ -4,6 +4,7 @@
 #include <chrono>
 #include "decoder.h"
 #include "device_pool.h"
+#include "thread_profile.hpp"
 
 Decoder::Decoder(Cfg &cfg)
 :m_cfg(cfg)
@@ -194,7 +195,11 @@ bool Decoder::process_inputs(int section)
     // done
     if (section >= ds_size)
     {
+        TP_END("[main thread] working");
+        TP_BEGIN("[main thread] wait");
         m_thread_q->add();
+        TP_END("[main thread] wait");
+        TP_BEGIN("[main thread] working");
         return m_done;
     }
 
@@ -250,13 +255,18 @@ void Decoder::compute_thread_f(int thread_id, Device *device)
 {
     while(1)
     {
+        TP_BEGIN("[compute thread " + std::to_string(thread_id) + "] wait");
         m_thread_q->remove(device, [](Device *device){
             device->submit_input();
         });
+        TP_END("[compute thread " + std::to_string(thread_id) + "] wait");
+
         if (m_done)
         {
             return;
         }
+
+        TP_BEGIN("[compute thread " + std::to_string(thread_id) + "] compute");
         auto start = std::chrono::steady_clock::now();
         device->run(m_p_output, m_output_size*sizeof(Hash));
         if (m_benchmark)
@@ -269,6 +279,7 @@ void Decoder::compute_thread_f(int thread_id, Device *device)
                 m_kernel_score = score;
             }
         }
+        TP_END("[compute thread " + std::to_string(thread_id) + "] compute");
     }
 }
 
@@ -319,8 +330,10 @@ std::string Decoder::decode(const std::string &devices)
         m_iterations_len *= m_cfg.sources[ds.source].size();
     }
     if (!m_benchmark) std::cout << std::endl;
+    TP_BEGIN("[main thread] work");
     process_inputs(0);
-    
+    TP_END("[main thread] work");
+
     // notify all compute threads done
     m_done = true;
     for (int i = 0; i < list.size(); i++)
@@ -354,10 +367,13 @@ void Decoder::benchmark()
     int count = dp->get_device_count();
     for (int i = 0; i < count; ++i)
     {
+        if(i==0) continue;
         std::cout << i << ". " << dp->get_device(i)->info << std::endl;
         m_kernel_score = 0;
         decode(std::to_string(i));
         std::cout << "   perf: " << m_kernel_score << "MH/s" << std::endl;
     }
     delete dp;
+
+    PRINT_TP_DATA();
 }

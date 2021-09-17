@@ -66,16 +66,16 @@ void benchmark()
     delete thecfg;
 
     // write dehash.ini
-    std::cout << "--------\nyou can choose to save devices list in dehash.ini\n";
-    std::cout << "input like 0,1,2 (enter to skip):";
-    std::string list;
-    std::getline(std::cin, list);
-    if (list.size())
-    {
-        std::ofstream file("dehash.ini");
-        file << "devices = " << list << "\n";
-        file.close();
-    }
+    // std::cout << "--------\nyou can choose to save devices list in dehash.ini\n";
+    // std::cout << "input like 0,1,2 (enter to skip):";
+    // std::string list;
+    // std::getline(std::cin, list);
+    // if (list.size())
+    // {
+    //     std::ofstream file("dehash.ini");
+    //     file << "devices = " << list << "\n";
+    //     file.close();
+    // }
 }
 
 std::string decode(const std::string &str, const std::string &devices, Cfg &cfg)
