@@ -13,6 +13,18 @@
 // #define Z_LENGTH 1
 // #define Z_TYPE 2
 
+#ifndef X_LENGTH
+#define X_LENGTH 0
+#endif
+
+#ifndef Y_LENGTH
+#define Y_LENGTH 0
+#endif
+
+#ifndef Z_LENGTH
+#define Z_LENGTH 0
+#endif
+
 __kernel void compute(
     __global int* p_count,
     __constant uchar* p_input,
@@ -22,13 +34,11 @@ __kernel void compute(
     __constant uchar* p_helper,
     int hash_len)
 {
-    if(*p_count >= hash_len) return;
-
     // fill data
     uchar data[BLOCK_LEN]= {0};
     data[DATA_LENGTH] = 0x80;
     data[BLOCK_LEN - LENGTH_SIZE] = (uchar)(DATA_LENGTH << 3);
-    for (int i = 0; i < DATA_LENGTH; i++) {
+    for (int i = 0; i < DATA_LENGTH - X_LENGTH - Y_LENGTH - Z_LENGTH; i++) {
         data[i] = p_input[i];
     }
 
